@@ -99,6 +99,11 @@ support via MacBook accelerometer (slap to pause).`,
 	}
 }
 
+func disableKittyKeyboard() {
+	// Pop kitty keyboard protocol stack (no-op on terminals that don't support it)
+	fmt.Print("\x1b[<u") // disable enhanced keyboard mode
+}
+
 func runAgent(cmd *cobra.Command, args []string) error {
 	agentName := args[0]
 	prompt := ""
@@ -222,6 +227,9 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		}
 		close(narrationEvents)
 	}()
+
+	disableKittyKeyboard()
+	defer fmt.Print("\x1b[>u") // restore on exit (push/pop)
 
 	// Print session start
 	if !flagQuiet {
