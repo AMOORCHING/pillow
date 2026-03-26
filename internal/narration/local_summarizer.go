@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pillow-sh/pillow/internal/agent"
+	"github.com/AMOORCHING/pillow/internal/agent"
 )
 
 // LocalSummarizer uses regex/template-based summarization for offline mode.

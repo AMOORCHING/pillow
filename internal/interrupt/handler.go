@@ -7,9 +7,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/pillow-sh/pillow/internal/agent"
-	"github.com/pillow-sh/pillow/internal/bus"
-	"github.com/pillow-sh/pillow/internal/narration"
+	"github.com/AMOORCHING/pillow/internal/agent"
+	"github.com/AMOORCHING/pillow/internal/bus"
+	"github.com/AMOORCHING/pillow/internal/narration"
 )
 
 // Handler processes interrupts and maps them to agent actions.

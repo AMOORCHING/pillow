@@ -11,13 +11,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pillow-sh/pillow/internal/agent"
-	"github.com/pillow-sh/pillow/internal/bus"
-	"github.com/pillow-sh/pillow/internal/config"
-	"github.com/pillow-sh/pillow/internal/cost"
-	"github.com/pillow-sh/pillow/internal/interrupt"
-	"github.com/pillow-sh/pillow/internal/narration"
-	"github.com/pillow-sh/pillow/internal/privacy"
+	"github.com/AMOORCHING/pillow/internal/agent"
+	"github.com/AMOORCHING/pillow/internal/bus"
+	"github.com/AMOORCHING/pillow/internal/config"
+	"github.com/AMOORCHING/pillow/internal/cost"
+	"github.com/AMOORCHING/pillow/internal/interrupt"
+	"github.com/AMOORCHING/pillow/internal/narration"
+	"github.com/AMOORCHING/pillow/internal/privacy"
 )
 
 var (

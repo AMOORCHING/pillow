@@ -3,9 +3,9 @@ package privacy
 import (
 	"fmt"
 
-	"github.com/pillow-sh/pillow/internal/config"
-	"github.com/pillow-sh/pillow/internal/narration"
-	"github.com/pillow-sh/pillow/internal/tts"
+	"github.com/AMOORCHING/pillow/internal/config"
+	"github.com/AMOORCHING/pillow/internal/narration"
+	"github.com/AMOORCHING/pillow/internal/tts"
 )
 
 // Components holds the summarizer and TTS provider selected by privacy mode.

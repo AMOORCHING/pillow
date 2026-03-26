@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/pillow-sh/pillow/internal/agent"
-	"github.com/pillow-sh/pillow/internal/tts"
+	"github.com/AMOORCHING/pillow/internal/agent"
+	"github.com/AMOORCHING/pillow/internal/tts"
 )
 
 // Engine orchestrates the narration pipeline: batch events → summarize → TTS.

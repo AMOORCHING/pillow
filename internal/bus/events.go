@@ -3,7 +3,7 @@ package bus
 import (
 	"time"
 
-	"github.com/pillow-sh/pillow/internal/agent"
+	"github.com/AMOORCHING/pillow/internal/agent"
 )
 
 // InterruptType represents what triggered an interrupt.

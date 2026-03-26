@@ -1,4 +1,4 @@
-module github.com/pillow-sh/pillow
+module github.com/AMOORCHING/pillow
 
 go 1.25.7
 

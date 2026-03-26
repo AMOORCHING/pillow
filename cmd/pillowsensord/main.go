@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pillow-sh/pillow/internal/interrupt"
+	"github.com/AMOORCHING/pillow/internal/interrupt"
 )
 
 func main() {

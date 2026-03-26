@@ -7,14 +7,14 @@ A CLI wrapper that adds real-time voice narration to agentic coding tools (start
 ## Install
 
 ```bash
-go install github.com/pillow-sh/pillow/cmd/pillow@latest
-go install github.com/pillow-sh/pillow/cmd/pillowsensord@latest  # optional, for slap detection
+go install github.com/AMOORCHING/pillow/cmd/pillow@latest
+go install github.com/AMOORCHING/pillow/cmd/pillowsensord@latest  # optional, for slap detection
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/pillow-sh/pillow
+git clone https://github.com/AMOORCHING/pillow
 cd pillow
 make build
 ```

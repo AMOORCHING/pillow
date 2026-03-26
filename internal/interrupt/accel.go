@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/pillow-sh/pillow/internal/bus"
+	"github.com/AMOORCHING/pillow/internal/bus"
 )
 
 // AccelClient connects to pillowsensord and emits slap interrupts.
