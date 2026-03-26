@@ -27,7 +27,7 @@ go install github.com/AMOORCHING/pillow/cmd/pillowsensord@latest  # optional, fo
 ```bash
 git clone https://github.com/AMOORCHING/pillow
 cd pillow
-make build
+make build    # also: make install, make test, make vet, make clean
 ```
 
 ## Quick Start
@@ -68,7 +68,7 @@ Agent output → Summarizer (LLM) → TTS → Speaker
 ### Interrupts
 
 - **Slap your MacBook** — pauses the agent, plays "ow!", prompts for input
-- **Ctrl+\\** — narrates current status
+- **Ctrl+\\** — pauses the agent, prompts for input
 - **Ctrl+C** — kills everything (standard Unix)
 
 Slap detection requires Apple Silicon and the sensor daemon (`sudo pillowsensord`). Without it, keyboard interrupts work on all platforms.
@@ -92,15 +92,19 @@ Config lives at `~/.config/pillow/config.toml`. Run `pillow setup` to generate i
 provider = "cartesia"         # cartesia, piper, say
 cartesia_api_key = "sk-..."
 cartesia_voice = ""           # voice UUID (uses default if empty)
+cartesia_model = "sonic-3"    # Cartesia model ID
+speed = 1.0                   # playback speed multiplier
 
 [narration]
 anthropic_api_key = "sk-..."
 model = "claude-haiku-4-5-20251001"
+style = "default"             # default, minimal, verbose
 stale_threshold_ms = 3000
 batch_pause_ms = 500
 
 [interrupt]
 slap_enabled = true
+slap_sound = "pain"           # pain, sexy, halo
 sensitivity = 0.15
 cooldown_ms = 750
 
