@@ -30,6 +30,7 @@ func newClaudeCodeBridge(prompt string) (*Bridge, error) {
 		"--print",
 		"--output-format", "stream-json",
 		"--verbose",
+		"--dangerously-skip-permissions",
 	}
 	if prompt != "" {
 		args = append(args, prompt)

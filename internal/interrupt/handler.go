@@ -52,26 +52,33 @@ func (h *Handler) handleSlap(ctx context.Context, intr bus.Interrupt) {
 		log.Printf("failed to pause agent: %v", err)
 	}
 
-	// 3. Play "ow!" narration
+	// 3. Show slap feedback banner
+	fmt.Println()
+	fmt.Println("  ✋  slap! — agent paused")
+	fmt.Println()
+
+	// 4. Play "ow!" narration (non-blocking)
 	h.engine.SpeakImmediate("Ow! Okay okay, what's wrong?")
 
-	// 4. Prompt user for input
-	fmt.Print("\n> ")
+	// 5. Prompt for redirect
+	fmt.Print("  redirect → ")
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		input := scanner.Text()
 		if input != "" {
-			fmt.Printf("  (noted: %s — resuming with this in mind)\n", input)
-			// TODO: in a future version, inject user input as a redirect to the agent
+			fmt.Printf("  noted: %q\n", input)
+			// TODO: inject redirect into the running agent session
 		}
 	}
 
-	// 5. Resume the agent
+	// 6. Resume the agent
 	if err := h.bridge.Resume(); err != nil {
 		log.Printf("failed to resume agent: %v", err)
 	}
 
-	fmt.Println("  resuming...")
+	fmt.Println()
+	fmt.Println("  ▶  resuming...")
+	fmt.Println()
 }
 
 func (h *Handler) handleKeyboard(ctx context.Context) {
@@ -83,21 +90,28 @@ func (h *Handler) handleKeyboard(ctx context.Context) {
 		log.Printf("failed to pause agent: %v", err)
 	}
 
-	// 3. Prompt user for input
-	fmt.Print("\n> ")
+	// 3. Show interrupt feedback banner
+	fmt.Println()
+	fmt.Println("  ⌨  ctrl+\\ — agent paused")
+	fmt.Println()
+
+	// 4. Prompt for redirect
+	fmt.Print("  redirect → ")
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		input := scanner.Text()
 		if input != "" {
-			fmt.Printf("  (noted: %s — resuming with this in mind)\n", input)
-			// TODO: in a future version, inject user input as a redirect to the agent
+			fmt.Printf("  noted: %q\n", input)
+			// TODO: inject redirect into the running agent session
 		}
 	}
 
-	// 4. Resume the agent
+	// 5. Resume the agent
 	if err := h.bridge.Resume(); err != nil {
 		log.Printf("failed to resume agent: %v", err)
 	}
 
-	fmt.Println("  resuming...")
+	fmt.Println()
+	fmt.Println("  ▶  resuming...")
+	fmt.Println()
 }
