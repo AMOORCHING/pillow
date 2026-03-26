@@ -9,8 +9,7 @@ A CLI wrapper that adds real-time voice narration to agentic coding tools (start
 ### Homebrew (recommended)
 
 ```bash
-brew tap AMOORCHING/pillow
-brew install pillow-cli
+brew install AMOORCHING/pillow/pillow-cli
 ```
 
 This installs both `pillow` and `pillowsensord`.
