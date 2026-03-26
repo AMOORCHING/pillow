@@ -10,7 +10,7 @@ A CLI wrapper that adds real-time voice narration to agentic coding tools (start
 
 ```bash
 brew tap AMOORCHING/pillow
-brew install pillow
+brew install pillow-cli
 ```
 
 This installs both `pillow` and `pillowsensord`.
@@ -44,6 +44,8 @@ On first run, pillow walks you through a 30-second setup wizard to configure you
 pillow <agent> [prompt]          # run an agent with voice narration
 pillow setup                     # interactive setup wizard
 pillow config                    # open config in $EDITOR
+pillow sensord start             # start the sensor daemon (requires sudo)
+pillow sensord stop              # stop the sensor daemon
 pillow sensord status            # check if sensor daemon is running
 ```
 
@@ -71,7 +73,7 @@ Agent output → Summarizer (LLM) → TTS → Speaker
 - **Ctrl+\\** — pauses the agent, prompts for input
 - **Ctrl+C** — kills everything (standard Unix)
 
-Slap detection requires Apple Silicon and the sensor daemon (`sudo pillowsensord`). Without it, keyboard interrupts work on all platforms.
+Slap detection requires Apple Silicon and the sensor daemon (`pillow sensord start`). Without it, keyboard interrupts work on all platforms.
 
 ## Privacy Modes
 
@@ -128,9 +130,12 @@ Slap detection requires accelerometer access, which needs root on macOS. pillow 
 They communicate over a Unix socket at `/tmp/pillow.sock`.
 
 ```bash
-sudo pillowsensord &           # start sensor daemon
-pillow claude "fix the bug"    # pillow connects automatically
+pillow sensord start             # start daemon (prompts for sudo)
+pillow claude "fix the bug"      # pillow connects automatically
+pillow sensord stop              # stop the daemon
 ```
+
+If installed via Homebrew, you can also use `brew services start pillow-cli` to run the daemon as a managed service.
 
 ## Cost Tracking
 

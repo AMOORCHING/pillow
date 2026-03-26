@@ -57,10 +57,6 @@ func (e *Engine) Run(ctx context.Context, events <-chan agent.AgentEvent) {
 	for {
 		select {
 		case <-ctx.Done():
-			// Flush any remaining batch
-			if len(batch) > 0 {
-				e.processBatch(ctx, batch)
-			}
 			return
 
 		case evt, ok := <-events:

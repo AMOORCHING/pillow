@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -86,12 +88,56 @@ support via MacBook accelerometer (slap to pause).`,
 				fmt.Println("pillowsensord is running")
 			} else {
 				fmt.Println("pillowsensord is not running")
-				fmt.Println("Start with: sudo pillowsensord")
+				fmt.Println("Start with: pillow sensord start")
 			}
 		},
 	}
 
-	sensordCmd.AddCommand(sensordStatusCmd)
+	sensordStartCmd := &cobra.Command{
+		Use:   "start",
+		Short: "Start the sensor daemon (requires sudo)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if interrupt.SensordRunning("") {
+				fmt.Println("pillowsensord is already running")
+				return nil
+			}
+			c := exec.Command("sudo", "pillowsensord")
+			c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+			c.Stdout = nil
+			c.Stderr = nil
+			if err := c.Start(); err != nil {
+				return fmt.Errorf("failed to start pillowsensord: %w", err)
+			}
+			// Wait briefly for the daemon to bind its socket
+			for i := 0; i < 10; i++ {
+				if interrupt.SensordRunning("") {
+					fmt.Println("pillowsensord started (pid", c.Process.Pid, ")")
+					return nil
+				}
+				time.Sleep(200 * time.Millisecond)
+			}
+			return fmt.Errorf("pillowsensord started but is not responding on %s", interrupt.SensorSocket)
+		},
+	}
+
+	sensordStopCmd := &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the sensor daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !interrupt.SensordRunning("") {
+				fmt.Println("pillowsensord is not running")
+				return nil
+			}
+			c := exec.Command("sudo", "pkill", "-f", "pillowsensord")
+			if err := c.Run(); err != nil {
+				return fmt.Errorf("failed to stop pillowsensord: %w", err)
+			}
+			fmt.Println("pillowsensord stopped")
+			return nil
+		},
+	}
+
+	sensordCmd.AddCommand(sensordStatusCmd, sensordStartCmd, sensordStopCmd)
 	rootCmd.AddCommand(setupCmd, configCmd, sensordCmd)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -206,7 +252,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			}()
 		} else {
 			fmt.Println("  note: slap detection unavailable (pillowsensord not running)")
-			fmt.Println("  use Ctrl+\\ for keyboard interrupt, or start with: sudo pillowsensord")
+			fmt.Println("  start with: pillow sensord start (or: brew services start pillow-cli)")
 		}
 	}
 
@@ -258,5 +304,8 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		fmt.Print(tracker.Summary())
 	}
 
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
 	return err
 }
