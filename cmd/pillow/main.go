@@ -100,8 +100,16 @@ support via MacBook accelerometer (slap to pause).`,
 }
 
 func disableKittyKeyboard() {
-	// Pop kitty keyboard protocol stack (no-op on terminals that don't support it)
-	fmt.Print("\x1b[<u") // disable enhanced keyboard mode
+	// Push flags=0 onto the kitty keyboard protocol stack, forcing legacy mode.
+	// This ensures terminals like Ghostty that enable the protocol natively
+	// will fall back to standard input, so Ctrl+\ generates SIGQUIT.
+	fmt.Print("\x1b[>0u")
+}
+
+func restoreKittyKeyboard() {
+	// Pop our entry off the kitty keyboard protocol stack, restoring
+	// whatever mode the terminal had before.
+	fmt.Print("\x1b[<u")
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
@@ -229,7 +237,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	}()
 
 	disableKittyKeyboard()
-	defer fmt.Print("\x1b[>u") // restore on exit (push/pop)
+	defer restoreKittyKeyboard()
 
 	// Print session start
 	if !flagQuiet {
