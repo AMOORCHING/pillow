@@ -1,0 +1,33 @@
+# ~/.config/pillow/config.toml
+
+privacy_mode = "cloud"             # "cloud" | "hybrid" | "local"
+
+# API keys
+anthropic_api_key = "sk-ant-..."
+cartesia_api_key = "..."
+
+# Voice
+voice = ""                         # Cartesia voice ID (blank for default)
+cartesia_model = "sonic-3"
+
+# Drift detection
+drift_check_interval = 10          # check every N tool calls
+drift_pause_ms = 2000              # or on pause > this duration
+drift_cooldown_s = 30              # suppress re-check after drift narration
+
+# Summarization
+summary_interval = 30              # compress every N events
+
+# Slap detection
+slap_threshold = 2.5               # g-force (0 to disable)
+slap_debounce_ms = 1000
+slap_stale_ms = 5000
+slap_sound = "chime"               # "chime" | "none"
+
+# IPC
+socket_path = "/tmp/pillow.sock"
+sensord_socket_path = "/tmp/pillowsensord.sock"
+
+# Narration
+narration_stale_ms = 3000          # drop narration items older than this
+mute_while_typing_ms = 500         # suppress audio if user typed within this window

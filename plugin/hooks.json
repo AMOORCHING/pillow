@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "pillow-hook preToolUse"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "pillow-hook postToolUse"
+      }
+    ],
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "pillow-hook sessionStart"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "type": "command",
+        "command": "pillow-hook sessionEnd"
+      }
+    ]
+  }
+}
