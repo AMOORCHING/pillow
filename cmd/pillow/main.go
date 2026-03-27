@@ -2,48 +2,38 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/AMOORCHING/pillow/internal/agent"
-	"github.com/AMOORCHING/pillow/internal/bus"
 	"github.com/AMOORCHING/pillow/internal/config"
-	"github.com/AMOORCHING/pillow/internal/cost"
+	"github.com/AMOORCHING/pillow/internal/daemon"
 	"github.com/AMOORCHING/pillow/internal/interrupt"
-	"github.com/AMOORCHING/pillow/internal/narration"
+	"github.com/AMOORCHING/pillow/internal/ipc"
 	"github.com/AMOORCHING/pillow/internal/privacy"
-)
-
-var (
-	flagQuiet      bool
-	flagNoSlap     bool
-	flagPrivacy    string
 )
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "pillow <agent> [prompt]",
-		Short: "Voice-narrated agentic coding with physical interrupts",
-		Long: `pillow wraps agentic coding tools (Claude Code) and adds real-time
-voice narration of what the agent is doing, plus physical interrupt
-support via MacBook accelerometer (slap to pause).`,
-		Args:                  cobra.MinimumNArgs(1),
-		DisableFlagsInUseLine: true,
-		RunE:                  runAgent,
+		Use:   "pillow",
+		Short: "Voice-narrated agentic coding supervision daemon",
+		Long: `pillow is a background daemon that supervises agentic coding tools.
+It provides voice narration of critical events, irreversibility warnings,
+slap-to-negotiate interrupts, and retrospective summaries.
+
+Start the daemon, then use Claude Code (or other tools) with pillow's plugin.`,
+		RunE: runDaemon,
 	}
 
-	rootCmd.Flags().BoolVar(&flagQuiet, "quiet", false, "mute voice narration")
-	rootCmd.Flags().BoolVar(&flagQuiet, "no-voice", false, "mute voice narration (alias for --quiet)")
-	rootCmd.Flags().BoolVar(&flagNoSlap, "no-slap", false, "disable accelerometer, keyboard only")
-	rootCmd.Flags().StringVar(&flagPrivacy, "privacy", "", "override privacy mode (cloud/hybrid/local)")
+	rootCmd.Flags().String("config", "", "path to config file")
+	rootCmd.Flags().String("socket-path", "", "override socket path")
+	rootCmd.Flags().Bool("verbose", false, "verbose logging")
 
 	setupCmd := &cobra.Command{
 		Use:   "setup",
@@ -56,11 +46,29 @@ support via MacBook accelerometer (slap to pause).`,
 
 	configCmd := &cobra.Command{
 		Use:   "config",
-		Short: "Open config file in $EDITOR",
+		Short: "Print current config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := config.ConfigPath()
 			if !config.Exists() {
 				fmt.Printf("No config file found. Run 'pillow setup' first, or create %s manually.\n", path)
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			fmt.Print(string(data))
+			return nil
+		},
+	}
+
+	editConfigCmd := &cobra.Command{
+		Use:   "edit",
+		Short: "Open config file in $EDITOR",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := config.ConfigPath()
+			if !config.Exists() {
+				fmt.Printf("No config file found. Run 'pillow setup' first.\n")
 				return nil
 			}
 			editor := os.Getenv("EDITOR")
@@ -74,6 +82,84 @@ support via MacBook accelerometer (slap to pause).`,
 			return c.Run()
 		},
 	}
+	configCmd.AddCommand(editConfigCmd)
+
+	recapCmd := &cobra.Command{
+		Use:   "recap",
+		Short: "Request retrospective summary of current session",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			client := ipc.NewClient(cfg.SocketPath)
+			if !client.Ping() {
+				return fmt.Errorf("pillow daemon is not running — start with: pillow")
+			}
+			ctx := context.Background()
+			resp, err := client.GetSummary(ctx)
+			if err != nil {
+				return err
+			}
+			if resp.Summary == "" {
+				fmt.Println("No session summary available yet.")
+				return nil
+			}
+			fmt.Println(resp.Summary)
+			return nil
+		},
+	}
+
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Print daemon status and current session info",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			client := ipc.NewClient(cfg.SocketPath)
+			if !client.Ping() {
+				fmt.Println("pillow daemon is not running")
+				return nil
+			}
+			ctx := context.Background()
+			resp, err := client.GetStatus(ctx)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("pillow daemon running\n")
+			if resp.ActiveSession != "" {
+				fmt.Printf("  session:  %s\n", resp.ActiveSession)
+				fmt.Printf("  events:   %d\n", resp.Events)
+				fmt.Printf("  cost:     %s\n", resp.Cost)
+			} else {
+				fmt.Println("  no active session")
+			}
+			if resp.Negotiation != nil && resp.Negotiation.Active {
+				fmt.Printf("  negotiation: active (outcome: %s)\n", resp.Negotiation.Outcome)
+			}
+			return nil
+		},
+	}
+
+	historyCmd := &cobra.Command{
+		Use:   "history",
+		Short: "Print recent interrupt events",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := config.HistoryPath()
+			data, err := os.ReadFile(path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					fmt.Println("No interrupt history yet.")
+					return nil
+				}
+				return err
+			}
+			fmt.Print(string(data))
+			return nil
+		},
+	}
 
 	sensordCmd := &cobra.Command{
 		Use:   "sensord",
@@ -84,11 +170,13 @@ support via MacBook accelerometer (slap to pause).`,
 		Use:   "status",
 		Short: "Check if sensord is running",
 		Run: func(cmd *cobra.Command, args []string) {
-			if interrupt.SensordRunning("") {
+			cfg, _ := config.Load()
+			client := ipc.NewClient(cfg.SensordSocketPath)
+			if client.Ping() {
 				fmt.Println("pillowsensord is running")
 			} else {
 				fmt.Println("pillowsensord is not running")
-				fmt.Println("Start with: pillow sensord start")
+				fmt.Println("Start with: sudo pillowsensord")
 			}
 		},
 	}
@@ -97,26 +185,13 @@ support via MacBook accelerometer (slap to pause).`,
 		Use:   "start",
 		Short: "Start the sensor daemon (requires sudo)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if interrupt.SensordRunning("") {
-				fmt.Println("pillowsensord is already running")
-				return nil
-			}
 			c := exec.Command("sudo", "pillowsensord")
 			c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-			c.Stdout = nil
-			c.Stderr = nil
 			if err := c.Start(); err != nil {
 				return fmt.Errorf("failed to start pillowsensord: %w", err)
 			}
-			// Wait briefly for the daemon to bind its socket
-			for i := 0; i < 10; i++ {
-				if interrupt.SensordRunning("") {
-					fmt.Println("pillowsensord started (pid", c.Process.Pid, ")")
-					return nil
-				}
-				time.Sleep(200 * time.Millisecond)
-			}
-			return fmt.Errorf("pillowsensord started but is not responding on %s", interrupt.SensorSocket)
+			fmt.Printf("pillowsensord started (pid %d)\n", c.Process.Pid)
+			return nil
 		},
 	}
 
@@ -124,10 +199,6 @@ support via MacBook accelerometer (slap to pause).`,
 		Use:   "stop",
 		Short: "Stop the sensor daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !interrupt.SensordRunning("") {
-				fmt.Println("pillowsensord is not running")
-				return nil
-			}
 			c := exec.Command("sudo", "pkill", "-f", "pillowsensord")
 			if err := c.Run(); err != nil {
 				return fmt.Errorf("failed to stop pillowsensord: %w", err)
@@ -138,52 +209,33 @@ support via MacBook accelerometer (slap to pause).`,
 	}
 
 	sensordCmd.AddCommand(sensordStatusCmd, sensordStartCmd, sensordStopCmd)
-	rootCmd.AddCommand(setupCmd, configCmd, sensordCmd)
+	rootCmd.AddCommand(setupCmd, configCmd, recapCmd, statusCmd, historyCmd, sensordCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func disableKittyKeyboard() {
-	// Push flags=0 onto the kitty keyboard protocol stack, forcing legacy mode.
-	// This ensures terminals like Ghostty that enable the protocol natively
-	// will fall back to standard input, so Ctrl+\ generates SIGQUIT.
-	fmt.Print("\x1b[>0u")
-}
-
-func restoreKittyKeyboard() {
-	// Pop our entry off the kitty keyboard protocol stack, restoring
-	// whatever mode the terminal had before.
-	fmt.Print("\x1b[<u")
-}
-
-func runAgent(cmd *cobra.Command, args []string) error {
-	agentName := args[0]
-	prompt := ""
-	if len(args) > 1 {
-		prompt = args[1]
-	}
-
-	// Load config (run wizard if first time)
+func runDaemon(cmd *cobra.Command, args []string) error {
+	// Load config
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
 	if !config.Exists() {
-		fmt.Println("  First time? Let's set up pillow.")
-		wizardCfg, err := config.RunWizard()
-		if err != nil {
-			return err
-		}
-		cfg = wizardCfg
-		fmt.Println("  Starting your session now...")
+		fmt.Println("First time? Run 'pillow setup' to configure.")
+		fmt.Println("Starting with defaults...")
 		fmt.Println()
 	}
 
-	// Override privacy mode if flag is set
-	if flagPrivacy != "" {
-		cfg.Privacy.Mode = flagPrivacy
+	// Override socket path if flag is set
+	if sp, _ := cmd.Flags().GetString("socket-path"); sp != "" {
+		cfg.SocketPath = sp
+	}
+
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	if !verbose {
+		log.SetOutput(os.Stderr)
 	}
 
 	// Build components based on privacy mode
@@ -191,121 +243,54 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer components.TTS.Close()
-
-	// Create cost tracker
-	tracker := cost.NewTracker()
-
-	// Create narration engine
-	engine := narration.NewEngine(
-		components.Summarizer,
-		components.TTS,
-		cfg.Narration.BatchPauseMs,
-		cfg.Narration.StaleThresholdMs,
-	)
-	engine.SetQuiet(flagQuiet)
-	engine.OnCharsSpoken = func(n int) {
-		tracker.AddTTSChars(n)
+	if components.TTS != nil {
+		defer components.TTS.Close()
 	}
 
-	// Wire up LLM cost tracking if using Haiku summarizer
-	if hs, ok := components.Summarizer.(*narration.HaikuSummarizer); ok {
-		hs.OnTokensUsed = func(input, output int) {
-			tracker.AddLLMTokens(input, output)
-		}
-	}
+	// Create daemon
+	d := daemon.New(cfg, components.TTS, components.Summarizer)
 
-	// Create agent bridge
-	bridge, err := agent.NewBridge(agentName, prompt)
-	if err != nil {
-		return err
-	}
-
-	// Create event bus
-	eventBus := bus.New()
+	// Create IPC server
+	server := ipc.NewServer(cfg.SocketPath, d)
 
 	// Set up context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle SIGINT for graceful shutdown
+	// Handle shutdown signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		fmt.Println("\n  shutting down...")
+		log.Println("[pillow] shutting down...")
 		cancel()
-		bridge.Signal(syscall.SIGINT)
 	}()
 
-	// Start keyboard interrupt listener
-	go interrupt.NewKeyboardListener().Run(ctx, eventBus.Interrupts)
-
-	// Start accelerometer listener (if enabled and available)
-	if !flagNoSlap && cfg.Interrupt.SlapEnabled {
-		if interrupt.SensordRunning("") {
-			go func() {
-				client := interrupt.NewAccelClient("")
-				if err := client.Run(ctx, eventBus.Interrupts); err != nil {
-					log.Printf("accelerometer: %v", err)
-				}
-			}()
-		} else {
-			fmt.Println("  note: slap detection unavailable (pillowsensord not running)")
-			fmt.Println("  start with: pillow sensord start (or: brew services start pillow-cli)")
-		}
+	// Start sensord client if slap detection is enabled
+	if cfg.SlapThreshold > 0 {
+		go startSensordClient(ctx, cfg, d)
 	}
 
-	// Start interrupt handler
-	interruptHandler := interrupt.NewHandler(bridge, engine)
-	go interruptHandler.Run(ctx, eventBus.Interrupts)
+	fmt.Printf("pillow daemon starting (socket: %s, privacy: %s)\n", cfg.SocketPath, cfg.PrivacyMode)
 
-	// Start narration engine (reads from a copy of agent events)
-	narrationEvents := make(chan agent.AgentEvent, 64)
-	go engine.Run(ctx, narrationEvents)
-
-	// Fan out: agent events go to both narration and cost tracking
-	go func() {
-		for evt := range eventBus.AgentEvents {
-			// Forward to narration
-			select {
-			case narrationEvents <- evt:
-			default:
-				// Drop if narration is backed up
-			}
-
-			// Track costs from agent completion events
-			if evt.Type == agent.EventComplete && evt.CostUSD > 0 {
-				tracker.AddAgentCost(evt.CostUSD)
-			}
-		}
-		close(narrationEvents)
-	}()
-
-	disableKittyKeyboard()
-	defer restoreKittyKeyboard()
-
-	// Print session start
-	if !flagQuiet {
-		fmt.Printf("  🎙 pillow · %s mode", cfg.Privacy.Mode)
-		if cfg.Interrupt.SlapEnabled && !flagNoSlap {
-			fmt.Print(" · slap enabled")
-		}
-		fmt.Println()
-		fmt.Println()
-	}
-
-	// Run the agent (blocks until completion)
-	err = bridge.Run(ctx, eventBus.AgentEvents)
-	close(eventBus.AgentEvents)
-
-	// Print session summary
-	if cfg.Cost.ShowSummary {
-		fmt.Print(tracker.Summary())
-	}
-
-	if errors.Is(err, context.Canceled) {
-		return nil
-	}
-	return err
+	// Start IPC server (blocks until context cancelled)
+	return server.Start(ctx)
 }
+
+func startSensordClient(ctx context.Context, cfg *config.Config, d *daemon.Daemon) {
+	if !interrupt.SensordRunning(cfg.SensordSocketPath) {
+		log.Println("[pillow] pillowsensord not running — slap detection unavailable")
+		return
+	}
+	log.Println("[pillow] connected to pillowsensord for slap detection")
+
+	client := interrupt.NewAccelClient(cfg.SensordSocketPath, func(evt agent.SlapEvent) {
+		d.BufferSlap(evt)
+	})
+	if err := client.Run(ctx); err != nil {
+		log.Printf("[pillow] sensord client error: %v", err)
+	}
+}
+
+// ensure Daemon implements EventHandler
+var _ ipc.EventHandler = (*daemon.Daemon)(nil)

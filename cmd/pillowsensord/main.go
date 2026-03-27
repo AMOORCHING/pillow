@@ -22,6 +22,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	socketPath := interrupt.DefaultSensordSocket
+	if len(os.Args) > 1 {
+		socketPath = os.Args[1]
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -35,22 +40,22 @@ func main() {
 	}()
 
 	// Remove stale socket
-	os.Remove(interrupt.SensorSocket)
+	os.Remove(socketPath)
 
 	// Listen on Unix domain socket
-	listener, err := net.Listen("unix", interrupt.SensorSocket)
+	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		log.Fatalf("failed to listen on %s: %v", interrupt.SensorSocket, err)
+		log.Fatalf("failed to listen on %s: %v", socketPath, err)
 	}
 	defer listener.Close()
-	defer os.Remove(interrupt.SensorSocket)
+	defer os.Remove(socketPath)
 
 	// Make socket accessible to non-root users
-	if err := os.Chmod(interrupt.SensorSocket, 0666); err != nil {
+	if err := os.Chmod(socketPath, 0666); err != nil {
 		log.Printf("warning: couldn't chmod socket: %v", err)
 	}
 
-	log.Printf("pillowsensord listening on %s", interrupt.SensorSocket)
+	log.Printf("pillowsensord listening on %s", socketPath)
 
 	// Track connected clients
 	var (
@@ -114,11 +119,10 @@ func main() {
 
 // runAccelerometerLoop is a stub that will be replaced with real sensor integration.
 // For now, it just sleeps. The real implementation will use:
-//   import "github.com/taigrr/apple-silicon-accelerometer/accel"
+//
+//	import "github.com/taigrr/apple-silicon-accelerometer/accel"
+//
 // and detect vibrations using STA/LTA algorithm.
 func runAccelerometerLoop(ctx context.Context, onSlap func(magnitude float64)) {
-	// Stub: In production, this polls the accelerometer via IOKit HID
-	// and runs the vibration detection pipeline from spank.
-	// For development without hardware, this is a no-op.
 	<-ctx.Done()
 }
