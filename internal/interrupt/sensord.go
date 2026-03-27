@@ -2,8 +2,8 @@ package interrupt
 
 import "time"
 
-// SensorSocket is the default Unix domain socket path for the sensor daemon.
-const SensorSocket = "/tmp/pillow.sock"
+// DefaultSensordSocket is the default Unix domain socket path for the sensor daemon.
+const DefaultSensordSocket = "/tmp/pillowsensord.sock"
 
 // SlapEvent is sent from pillowsensord to pillow clients over the socket.
 type SlapEvent struct {

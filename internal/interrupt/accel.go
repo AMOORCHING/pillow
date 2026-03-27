@@ -9,28 +9,32 @@ import (
 	"net"
 	"time"
 
-	"github.com/AMOORCHING/pillow/internal/bus"
+	"github.com/AMOORCHING/pillow/internal/agent"
 )
 
-// AccelClient connects to pillowsensord and emits slap interrupts.
+// SlapCallback is called when a slap is detected.
+type SlapCallback func(evt agent.SlapEvent)
+
+// AccelClient connects to pillowsensord and forwards slap events.
 type AccelClient struct {
 	socketPath string
+	onSlap     SlapCallback
 }
 
 // NewAccelClient creates a client for the sensor daemon.
-func NewAccelClient(socketPath string) *AccelClient {
+func NewAccelClient(socketPath string, onSlap SlapCallback) *AccelClient {
 	if socketPath == "" {
-		socketPath = SensorSocket
+		socketPath = DefaultSensordSocket
 	}
-	return &AccelClient{socketPath: socketPath}
+	return &AccelClient{socketPath: socketPath, onSlap: onSlap}
 }
 
-// Run connects to the sensor daemon and emits interrupts.
+// Run connects to the sensor daemon and forwards slap events.
 // It blocks until the context is cancelled.
-func (a *AccelClient) Run(ctx context.Context, interrupts chan<- bus.Interrupt) error {
+func (a *AccelClient) Run(ctx context.Context) error {
 	conn, err := net.DialTimeout("unix", a.socketPath, 2*time.Second)
 	if err != nil {
-		return fmt.Errorf("connecting to sensor daemon at %s: %w — run with --no-slap or start pillowsensord", a.socketPath, err)
+		return fmt.Errorf("connecting to sensord at %s: %w", a.socketPath, err)
 	}
 	defer conn.Close()
 
@@ -48,16 +52,11 @@ func (a *AccelClient) Run(ctx context.Context, interrupts chan<- bus.Interrupt) 
 		}
 
 		if evt.Type == "slap" {
-			log.Printf("slap detected (magnitude: %.2f)", evt.Magnitude)
-			select {
-			case interrupts <- bus.Interrupt{
-				Type:      bus.InterruptSlap,
+			log.Printf("[pillow] slap detected (magnitude: %.2f)", evt.Magnitude)
+			a.onSlap(agent.SlapEvent{
 				Timestamp: evt.Timestamp,
-				Amplitude: evt.Magnitude,
-			}:
-			case <-ctx.Done():
-				return nil
-			}
+				Force:     evt.Magnitude,
+			})
 		}
 	}
 
@@ -67,7 +66,7 @@ func (a *AccelClient) Run(ctx context.Context, interrupts chan<- bus.Interrupt) 
 // SensordRunning checks if the sensor daemon is accessible.
 func SensordRunning(socketPath string) bool {
 	if socketPath == "" {
-		socketPath = SensorSocket
+		socketPath = DefaultSensordSocket
 	}
 	conn, err := net.DialTimeout("unix", socketPath, 500*time.Millisecond)
 	if err != nil {
