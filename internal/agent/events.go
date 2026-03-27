@@ -2,69 +2,69 @@ package agent
 
 import "time"
 
-// EventType represents the type of agent event.
-type EventType int
-
-const (
-	EventInit       EventType = iota // session initialization
-	EventThinking                    // agent reasoning/planning
-	EventText                        // agent text output
-	EventToolUse                     // tool invocation (file edit, command, etc.)
-	EventToolResult                  // tool execution result
-	EventComplete                    // task finished
-	EventError                       // error occurred
-)
-
-func (e EventType) String() string {
-	switch e {
-	case EventInit:
-		return "init"
-	case EventThinking:
-		return "thinking"
-	case EventText:
-		return "text"
-	case EventToolUse:
-		return "tool_use"
-	case EventToolResult:
-		return "tool_result"
-	case EventComplete:
-		return "complete"
-	case EventError:
-		return "error"
-	default:
-		return "unknown"
-	}
-}
-
-// AgentEvent is a parsed event from the agent's output stream.
+// AgentEvent is the canonical event sent from plugin to daemon over IPC.
 type AgentEvent struct {
-	Type      EventType
-	Timestamp time.Time
-
-	// Init fields
-	Model     string
-	SessionID string
-
-	// Thinking / Text fields
-	Text string
-
-	// ToolUse fields
-	ToolName  string
-	ToolInput map[string]any
-
-	// ToolResult fields
-	Stdout  string
-	Stderr  string
-	IsError bool
-
-	// Complete fields
-	Result  string
-	CostUSD float64
-	Usage   Usage
+	Type      string         `json:"type"`       // "preToolUse" | "postToolUse" | "sessionStart" | "sessionEnd"
+	SessionID string         `json:"session_id"`
+	Tool      string         `json:"tool"`        // "Write" | "Read" | "Bash" | "Edit" | "Glob" | "Grep" | etc.
+	Input     map[string]any `json:"input"`       // tool-specific input (file_path, command, etc.)
+	Output    string         `json:"output"`      // for postToolUse only
+	Timestamp time.Time      `json:"timestamp"`
+	Goal      string         `json:"goal"`        // for sessionStart only
 }
 
-// Usage holds token usage data from the agent.
-type Usage struct {
-	InputTokens  int
-	OutputTokens int
+// EventResponse is returned by the daemon to the plugin on POST /event.
+type EventResponse struct {
+	Classify  string `json:"classify"`  // "none" | "warn" | "block"
+	Reason    string `json:"reason"`
+	Narration string `json:"narration"` // text that will be narrated (if any)
+}
+
+// SlapEvent is returned by GET /slap when a slap is buffered.
+type SlapEvent struct {
+	Timestamp time.Time `json:"timestamp"`
+	Force     float64   `json:"force"`
+}
+
+// SessionStartRequest is sent on POST /session/start.
+type SessionStartRequest struct {
+	SessionID string `json:"session_id"`
+	Goal      string `json:"goal"`
+}
+
+// SessionEndRequest is sent on POST /session/end.
+type SessionEndRequest struct {
+	SessionID string `json:"session_id"`
+}
+
+// SessionEndResponse is returned by POST /session/end.
+type SessionEndResponse struct {
+	Cost    string `json:"cost"`
+	Summary string `json:"summary"`
+}
+
+// NarrateRequest is sent on POST /narrate.
+type NarrateRequest struct {
+	Text string `json:"text"`
+}
+
+// SummaryResponse is returned by GET /summary.
+type SummaryResponse struct {
+	Summary    string `json:"summary"`
+	EventCount int    `json:"event_count"`
+}
+
+// StatusResponse is returned by GET /status.
+type StatusResponse struct {
+	ActiveSession string          `json:"active_session"`
+	Events        int             `json:"events"`
+	Cost          string          `json:"cost"`
+	Negotiation   *NegotiationInfo `json:"negotiation,omitempty"`
+}
+
+// NegotiationInfo describes an active slap negotiation.
+type NegotiationInfo struct {
+	Active      bool   `json:"active"`
+	AllowedFile string `json:"allowed_file,omitempty"`
+	Outcome     string `json:"outcome"`
 }
