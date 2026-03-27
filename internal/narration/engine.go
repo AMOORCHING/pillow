@@ -68,8 +68,8 @@ func (e *Engine) Run(ctx context.Context, events <-chan agent.AgentEvent) {
 				return
 			}
 
-			// Skip thinking deltas for batching (too noisy)
-			if evt.Type == agent.EventThinking {
+			// Skip events that shouldn't be narrated
+			if evt.Type == agent.EventThinking || evt.Type == agent.EventInit {
 				continue
 			}
 
