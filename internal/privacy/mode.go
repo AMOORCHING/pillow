@@ -16,7 +16,7 @@ type Components struct {
 
 // Build creates the narration components based on the privacy mode and config.
 func Build(cfg *config.Config) (*Components, error) {
-	mode := cfg.Privacy.Mode
+	mode := cfg.PrivacyMode
 	if mode == "" {
 		mode = "cloud"
 	}
@@ -36,25 +36,17 @@ func Build(cfg *config.Config) (*Components, error) {
 func buildCloud(cfg *config.Config) (*Components, error) {
 	// Summarizer: Haiku
 	var sum narration.Summarizer
-	if cfg.Narration.AnthropicAPIKey != "" {
-		sum = narration.NewHaikuSummarizer(cfg.Narration.AnthropicAPIKey, cfg.Narration.Model)
+	if cfg.AnthropicAPIKey != "" {
+		sum = narration.NewHaikuSummarizer(cfg.AnthropicAPIKey, "")
 	} else {
-		// Fallback to local if no API key
 		sum = narration.NewLocalSummarizer()
 	}
 
 	// TTS: Cartesia preferred, fallback to say
 	var provider tts.Provider
-	switch cfg.TTS.Provider {
-	case "cartesia":
-		if cfg.TTS.CartesiaAPIKey != "" {
-			provider = tts.NewCartesiaProvider(cfg.TTS.CartesiaAPIKey, cfg.TTS.CartesiaVoice, cfg.TTS.CartesiaModel)
-		} else {
-			provider = tts.NewSayProvider("", 200)
-		}
-	case "piper":
-		provider = tts.NewPiperProvider("")
-	default:
+	if cfg.CartesiaAPIKey != "" {
+		provider = tts.NewCartesiaProvider(cfg.CartesiaAPIKey, cfg.Voice, cfg.CartesiaModel)
+	} else {
 		provider = tts.NewSayProvider("", 200)
 	}
 
@@ -64,8 +56,8 @@ func buildCloud(cfg *config.Config) (*Components, error) {
 func buildHybrid(cfg *config.Config) (*Components, error) {
 	// Summarizer: Haiku (cloud)
 	var sum narration.Summarizer
-	if cfg.Narration.AnthropicAPIKey != "" {
-		sum = narration.NewHaikuSummarizer(cfg.Narration.AnthropicAPIKey, cfg.Narration.Model)
+	if cfg.AnthropicAPIKey != "" {
+		sum = narration.NewHaikuSummarizer(cfg.AnthropicAPIKey, "")
 	} else {
 		sum = narration.NewLocalSummarizer()
 	}

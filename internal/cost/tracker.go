@@ -8,9 +8,9 @@ import (
 
 // Default rates (as of 2025)
 const (
-	CartesiaRatePerChar    = 0.000006
-	HaikuInputRatePerTok   = 0.0000008
-	HaikuOutputRatePerTok  = 0.000004
+	CartesiaRatePerChar   = 0.000006
+	HaikuInputRatePerTok  = 0.0000008
+	HaikuOutputRatePerTok = 0.000004
 )
 
 // Tracker estimates API costs in real-time.
@@ -23,20 +23,23 @@ type Tracker struct {
 	llmOutputToks int
 	llmInputRate  float64
 	llmOutputRate float64
-	agentCostUSD  float64
 
-	sessionStart time.Time
-	slapCount    int
+	// Drift detection costs
+	driftInputToks  int
+	driftOutputToks int
+
+	sessionStart   time.Time
+	slapCount      int
 	narrationCount int
 }
 
 // NewTracker creates a cost tracker with default rates.
 func NewTracker() *Tracker {
 	return &Tracker{
-		ttsRate:      CartesiaRatePerChar,
-		llmInputRate: HaikuInputRatePerTok,
+		ttsRate:       CartesiaRatePerChar,
+		llmInputRate:  HaikuInputRatePerTok,
 		llmOutputRate: HaikuOutputRatePerTok,
-		sessionStart: time.Now(),
+		sessionStart:  time.Now(),
 	}
 }
 
@@ -56,11 +59,12 @@ func (t *Tracker) AddLLMTokens(input, output int) {
 	t.llmOutputToks += output
 }
 
-// AddAgentCost records the cost reported by the agent itself.
-func (t *Tracker) AddAgentCost(usd float64) {
+// AddDriftTokens records tokens used by drift detection.
+func (t *Tracker) AddDriftTokens(input, output int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.agentCostUSD = usd
+	t.driftInputToks += input
+	t.driftOutputToks += output
 }
 
 // AddSlap records a slap event.
@@ -70,53 +74,45 @@ func (t *Tracker) AddSlap() {
 	t.slapCount++
 }
 
-// PillowCost returns the estimated cost of pillow's own API usage.
-func (t *Tracker) PillowCost() float64 {
+// EstimateCost returns the total estimated cost.
+func (t *Tracker) EstimateCost() float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return float64(t.ttsChars)*t.ttsRate +
 		float64(t.llmInputToks)*t.llmInputRate +
-		float64(t.llmOutputToks)*t.llmOutputRate
+		float64(t.llmOutputToks)*t.llmOutputRate +
+		float64(t.driftInputToks)*t.llmInputRate +
+		float64(t.driftOutputToks)*t.llmOutputRate
 }
 
-// StatusLine returns a compact status string for the terminal.
+// StatusLine returns a compact status string.
 func (t *Tracker) StatusLine() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	cost := float64(t.ttsChars)*t.ttsRate +
-		float64(t.llmInputToks)*t.llmInputRate +
-		float64(t.llmOutputToks)*t.llmOutputRate
-	return fmt.Sprintf("pillow · %d slaps · %d narrations · ~$%.3f",
-		t.slapCount, t.narrationCount, cost)
+		float64(t.llmInputToks+t.driftInputToks)*t.llmInputRate +
+		float64(t.llmOutputToks+t.driftOutputToks)*t.llmOutputRate
+	return fmt.Sprintf("~$%.4f (%d narrations, %d slaps)", cost, t.narrationCount, t.slapCount)
 }
 
-// Summary returns a formatted session summary.
+// Summary returns a formatted session cost summary.
 func (t *Tracker) Summary() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	duration := time.Since(t.sessionStart)
 	ttsCost := float64(t.ttsChars) * t.ttsRate
-	llmCost := float64(t.llmInputToks)*t.llmInputRate + float64(t.llmOutputToks)*t.llmOutputRate
-	pillowTotal := ttsCost + llmCost
+	summarizerCost := float64(t.llmInputToks)*t.llmInputRate + float64(t.llmOutputToks)*t.llmOutputRate
+	driftCost := float64(t.driftInputToks)*t.llmInputRate + float64(t.driftOutputToks)*t.llmOutputRate
+	total := ttsCost + summarizerCost + driftCost
 
-	return fmt.Sprintf(`
-pillow session summary
-──────────────────────
-  Duration:     %s
-  Slaps:        %d
-  Narrations:   %d
-  Cost breakdown:
-    TTS:               $%.4f  (%d chars)
-    LLM (summarizer):  $%.4f  (%d input / %d output tokens)
-    Pillow total:     ~$%.4f
-`,
+	return fmt.Sprintf(
+		"Session cost: ~$%.4f (summarizer: %d tokens, drift: %d tokens, TTS: %d chars) over %s",
+		total,
+		t.llmInputToks+t.llmOutputToks,
+		t.driftInputToks+t.driftOutputToks,
+		t.ttsChars,
 		formatDuration(duration),
-		t.slapCount,
-		t.narrationCount,
-		ttsCost, t.ttsChars,
-		llmCost, t.llmInputToks, t.llmOutputToks,
-		pillowTotal,
 	)
 }
 

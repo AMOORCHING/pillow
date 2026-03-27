@@ -13,10 +13,10 @@ import (
 
 // Summarizer converts agent events into narration text.
 type Summarizer interface {
-	Summarize(ctx context.Context, events []agent.AgentEvent, rollingSummary string) (string, error)
+	Summarize(ctx context.Context, events []agent.AgentEvent, currentSummary string) (string, error)
 }
 
-// HaikuSummarizer uses Anthropic's Haiku model for natural narration.
+// HaikuSummarizer uses Anthropic's Haiku model for rolling compression.
 type HaikuSummarizer struct {
 	apiKey string
 	model  string
@@ -33,30 +33,29 @@ func NewHaikuSummarizer(apiKey, model string) *HaikuSummarizer {
 	return &HaikuSummarizer{apiKey: apiKey, model: model}
 }
 
-const systemPrompt = `You are narrating what a coding agent is doing in real-time. Be concise, casual, and technical. Speak as if you're a coworker walking someone through code changes. Never read code verbatim — describe what's happening at a conceptual level.
+const rollingSummaryPrompt = `You are summarizing an agentic coding session for a developer who stepped away. Here is the running summary so far:
 
-Rules:
-- Generate 1-2 sentences of narration max
-- Be specific about file names and what's changing
-- Don't read code line by line
-- Use natural spoken language (this will be read aloud)
-- Don't use markdown, bullet points, or formatting
-- Don't start with "The agent" — speak as the agent ("I'm creating...", "Let me look at...")`
+%s
 
-func (h *HaikuSummarizer) Summarize(ctx context.Context, events []agent.AgentEvent, rollingSummary string) (string, error) {
+Here are the %d new events since the last summary:
+
+%s
+
+Update the summary. Rules:
+- Narrative voice, as if briefing a colleague. Not a list.
+- Focus on: what changed, what broke, what decisions the agent made, what's in progress now.
+- Mention any warnings or interruptions that occurred.
+- Max 200 words.
+- This will be read aloud via TTS, so write for the ear, not the eye.`
+
+func (h *HaikuSummarizer) Summarize(ctx context.Context, events []agent.AgentEvent, currentSummary string) (string, error) {
 	eventsDesc := formatEventsForLLM(events)
 
-	userMsg := ""
-	if rollingSummary != "" {
-		userMsg = fmt.Sprintf("Recent context: %s\n\nNew events:\n%s", rollingSummary, eventsDesc)
-	} else {
-		userMsg = fmt.Sprintf("New events:\n%s", eventsDesc)
-	}
+	userMsg := fmt.Sprintf(rollingSummaryPrompt, currentSummary, len(events), eventsDesc)
 
 	reqBody := map[string]any{
 		"model":      h.model,
-		"max_tokens": 100,
-		"system":     systemPrompt,
+		"max_tokens": 400,
 		"messages": []map[string]string{
 			{"role": "user", "content": userMsg},
 		},
@@ -113,24 +112,12 @@ func formatEventsForLLM(events []agent.AgentEvent) string {
 	var buf bytes.Buffer
 	for _, evt := range events {
 		switch evt.Type {
-		case agent.EventThinking:
-			text := evt.Text
-			if len(text) > 200 {
-				text = text[:200] + "..."
-			}
-			fmt.Fprintf(&buf, "- Thinking: %s\n", text)
-		case agent.EventText:
-			text := evt.Text
-			if len(text) > 200 {
-				text = text[:200] + "..."
-			}
-			fmt.Fprintf(&buf, "- Said: %s\n", text)
-		case agent.EventToolUse:
-			fmt.Fprintf(&buf, "- Tool: %s", evt.ToolName)
-			if path, ok := evt.ToolInput["file_path"]; ok {
+		case "preToolUse":
+			fmt.Fprintf(&buf, "- Tool: %s", evt.Tool)
+			if path, ok := evt.Input["file_path"]; ok {
 				fmt.Fprintf(&buf, " (file: %v)", path)
 			}
-			if cmd, ok := evt.ToolInput["command"]; ok {
+			if cmd, ok := evt.Input["command"]; ok {
 				cmdStr := fmt.Sprint(cmd)
 				if len(cmdStr) > 80 {
 					cmdStr = cmdStr[:80] + "..."
@@ -138,24 +125,21 @@ func formatEventsForLLM(events []agent.AgentEvent) string {
 				fmt.Fprintf(&buf, " (command: %v)", cmdStr)
 			}
 			buf.WriteByte('\n')
-		case agent.EventToolResult:
-			if evt.IsError {
-				fmt.Fprintf(&buf, "- Tool error: %s\n", truncate(evt.Stderr, 100))
+		case "postToolUse":
+			if evt.Output != "" {
+				output := evt.Output
+				if len(output) > 100 {
+					output = output[:100] + "..."
+				}
+				fmt.Fprintf(&buf, "- Tool result: %s\n", output)
 			} else {
-				fmt.Fprintf(&buf, "- Tool completed successfully\n")
+				fmt.Fprintf(&buf, "- Tool completed\n")
 			}
-		case agent.EventComplete:
-			fmt.Fprintf(&buf, "- Task completed\n")
-		case agent.EventError:
-			fmt.Fprintf(&buf, "- Error: %s\n", evt.Text)
+		case "sessionStart":
+			fmt.Fprintf(&buf, "- Session started (goal: %s)\n", evt.Goal)
+		case "sessionEnd":
+			fmt.Fprintf(&buf, "- Session ended\n")
 		}
 	}
 	return buf.String()
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
 }
