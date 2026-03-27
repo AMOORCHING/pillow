@@ -10,74 +10,61 @@ import (
 
 // Config is the top-level pillow configuration.
 type Config struct {
-	TTS       TTSConfig       `toml:"tts"`
-	Narration NarrationConfig `toml:"narration"`
-	Interrupt InterruptConfig `toml:"interrupt"`
-	Privacy   PrivacyConfig   `toml:"privacy"`
-	Cost      CostConfig      `toml:"cost"`
-}
+	PrivacyMode string `toml:"privacy_mode"` // "cloud" | "hybrid" | "local"
 
-type TTSConfig struct {
-	Provider string `toml:"provider"` // cartesia, piper, say
-	Speed    float64 `toml:"speed"`
+	// API keys
+	AnthropicAPIKey string `toml:"anthropic_api_key"`
+	CartesiaAPIKey  string `toml:"cartesia_api_key"`
 
-	// Cartesia settings
-	CartesiaAPIKey string `toml:"cartesia_api_key"`
-	CartesiaVoice  string `toml:"cartesia_voice"`
-	CartesiaModel  string `toml:"cartesia_model"`
-}
+	// Voice
+	Voice         string `toml:"voice"`          // Cartesia voice ID
+	CartesiaModel string `toml:"cartesia_model"` // default "sonic-3"
 
-type NarrationConfig struct {
-	Style              string `toml:"style"` // default, minimal, verbose
-	Model              string `toml:"model"` // summarizer model
-	AnthropicAPIKey    string `toml:"anthropic_api_key"`
-	StaleThresholdMs   int    `toml:"stale_threshold_ms"`
-	BatchPauseMs       int    `toml:"batch_pause_ms"`
-}
+	// Drift detection
+	DriftCheckInterval int `toml:"drift_check_interval"` // check every N tool calls (default 10)
+	DriftPauseMs       int `toml:"drift_pause_ms"`       // or on pause > this duration (default 2000)
+	DriftCooldownS     int `toml:"drift_cooldown_s"`     // suppress re-check after drift narration (default 30)
 
-type InterruptConfig struct {
-	SlapEnabled bool    `toml:"slap_enabled"`
-	SlapSound   string  `toml:"slap_sound"` // pain, sexy, halo
-	Sensitivity float64 `toml:"sensitivity"`
-	CooldownMs  int     `toml:"cooldown_ms"`
-}
+	// Summarization
+	SummaryInterval int `toml:"summary_interval"` // compress every N events (default 30)
 
-type PrivacyConfig struct {
-	Mode string `toml:"mode"` // cloud, hybrid, local
-}
+	// Slap detection
+	SlapThreshold  float64 `toml:"slap_threshold"`   // g-force (default 2.5)
+	SlapDebounceMs int     `toml:"slap_debounce_ms"` // default 1000
+	SlapStaleMs    int     `toml:"slap_stale_ms"`    // default 5000
+	SlapSound      string  `toml:"slap_sound"`       // "chime" | "none" (default "chime")
 
-type CostConfig struct {
-	ShowLive    bool `toml:"show_live"`
-	ShowSummary bool `toml:"show_summary"`
+	// IPC
+	SocketPath        string `toml:"socket_path"`         // default "/tmp/pillow.sock"
+	SensordSocketPath string `toml:"sensord_socket_path"` // default "/tmp/pillowsensord.sock"
+
+	// Narration
+	NarrationStaleMs    int `toml:"narration_stale_ms"`     // drop narration items older than this (default 3000)
+	MuteWhileTypingMs   int `toml:"mute_while_typing_ms"`   // suppress audio if user typed within this window (default 500)
 }
 
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		TTS: TTSConfig{
-			Provider:      "say",
-			Speed:         1.0,
-			CartesiaModel: "sonic-3",
-		},
-		Narration: NarrationConfig{
-			Style:            "default",
-			Model:            "claude-haiku-4-5-20251001",
-			StaleThresholdMs: 3000,
-			BatchPauseMs:     500,
-		},
-		Interrupt: InterruptConfig{
-			SlapEnabled: false,
-			SlapSound:   "pain",
-			Sensitivity: 0.15,
-			CooldownMs:  750,
-		},
-		Privacy: PrivacyConfig{
-			Mode: "cloud",
-		},
-		Cost: CostConfig{
-			ShowLive:    true,
-			ShowSummary: true,
-		},
+		PrivacyMode:   "cloud",
+		CartesiaModel: "sonic-3",
+
+		DriftCheckInterval: 10,
+		DriftPauseMs:       2000,
+		DriftCooldownS:     30,
+
+		SummaryInterval: 30,
+
+		SlapThreshold:  2.5,
+		SlapDebounceMs: 1000,
+		SlapStaleMs:    5000,
+		SlapSound:      "chime",
+
+		SocketPath:        "/tmp/pillow.sock",
+		SensordSocketPath: "/tmp/pillowsensord.sock",
+
+		NarrationStaleMs:  3000,
+		MuteWhileTypingMs: 500,
 	}
 }
 
@@ -93,6 +80,11 @@ func ConfigDir() string {
 // ConfigPath returns the path to the config file.
 func ConfigPath() string {
 	return filepath.Join(ConfigDir(), "config.toml")
+}
+
+// HistoryPath returns the path to the history JSONL file.
+func HistoryPath() string {
+	return filepath.Join(ConfigDir(), "history.jsonl")
 }
 
 // Load reads the config file, falling back to defaults.
@@ -114,10 +106,10 @@ func Load() (*Config, error) {
 
 	// Environment variables override config file
 	if key := os.Getenv("CARTESIA_API_KEY"); key != "" {
-		cfg.TTS.CartesiaAPIKey = key
+		cfg.CartesiaAPIKey = key
 	}
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
-		cfg.Narration.AnthropicAPIKey = key
+		cfg.AnthropicAPIKey = key
 	}
 
 	return cfg, nil

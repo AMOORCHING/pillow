@@ -14,41 +14,38 @@ func RunWizard() (*Config, error) {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println()
-	fmt.Println("  Welcome to pillow! Let's get you set up — this takes about 30 seconds.")
+	fmt.Println("  Welcome to pillow! Let's get you set up.")
 	fmt.Println()
 	fmt.Println("  ─────────────────────────────────────────────────")
 	fmt.Println()
 
-	// Cartesia API key
-	fmt.Println("  Voice narration needs a TTS provider. Cartesia gives the best")
-	fmt.Println("  quality, but you can also run fully offline with macOS say.")
+	// Anthropic API key
+	fmt.Println("  Pillow uses Haiku for summarization and drift detection.")
 	fmt.Println()
-	fmt.Print("  Do you have a Cartesia API key?\n  Paste it here (or Enter to skip): ")
-	cartesiaKey := readLine(reader)
-	if cartesiaKey != "" {
-		cfg.TTS.Provider = "cartesia"
-		cfg.TTS.CartesiaAPIKey = cartesiaKey
-		fmt.Println("  ✓ Cartesia configured")
+	fmt.Print("  Anthropic API key (or Enter to skip): ")
+	anthropicKey := readLine(reader)
+	if anthropicKey != "" {
+		cfg.AnthropicAPIKey = anthropicKey
+		fmt.Println("  ok — Anthropic configured")
 	} else {
-		cfg.TTS.Provider = "say"
-		fmt.Println("  ✓ Using macOS say (offline, lower quality)")
+		fmt.Println("  ok — using template-based summarization (offline)")
 	}
 
 	fmt.Println()
 	fmt.Println("  ─────────────────────────────────────────────────")
 	fmt.Println()
 
-	// Anthropic API key
-	fmt.Println("  Pillow summarizes what the agent is doing before narrating it.")
-	fmt.Println("  This uses Haiku (very cheap) for natural-sounding summaries.")
+	// Cartesia API key
+	fmt.Println("  Voice narration uses Cartesia Sonic for high-quality TTS.")
+	fmt.Println("  You can also run fully offline with macOS say.")
 	fmt.Println()
-	fmt.Print("  Paste your Anthropic API key (or Enter to skip): ")
-	anthropicKey := readLine(reader)
-	if anthropicKey != "" {
-		cfg.Narration.AnthropicAPIKey = anthropicKey
-		fmt.Println("  ✓ Anthropic configured")
+	fmt.Print("  Cartesia API key (or Enter to skip): ")
+	cartesiaKey := readLine(reader)
+	if cartesiaKey != "" {
+		cfg.CartesiaAPIKey = cartesiaKey
+		fmt.Println("  ok — Cartesia configured")
 	} else {
-		fmt.Println("  ✓ Using template-based summarization (offline)")
+		fmt.Println("  ok — using macOS say (offline, lower quality)")
 	}
 
 	fmt.Println()
@@ -58,50 +55,65 @@ func RunWizard() (*Config, error) {
 	// Privacy mode
 	fmt.Println("  Privacy — what data leaves your machine?")
 	fmt.Println()
-	fmt.Println("    cloud   Best quality. Summaries → Anthropic, voice → Cartesia.")
-	fmt.Println("    hybrid  Good quality. Summaries → Anthropic, voice generated locally.")
-	fmt.Println("    local   Offline only. No API calls. Basic narration.")
+	fmt.Println("    cloud   Best quality. Summaries via Anthropic, voice via Cartesia.")
+	fmt.Println("    hybrid  Summaries via Anthropic, voice generated locally.")
+	fmt.Println("    local   Offline only. No API calls.")
 	fmt.Println()
 
 	// Auto-select based on available keys
 	if cartesiaKey != "" && anthropicKey != "" {
-		cfg.Privacy.Mode = "cloud"
+		cfg.PrivacyMode = "cloud"
 		fmt.Print("  Choose [cloud/hybrid/local] (default: cloud): ")
 	} else if anthropicKey != "" {
-		cfg.Privacy.Mode = "hybrid"
+		cfg.PrivacyMode = "hybrid"
 		fmt.Print("  Choose [cloud/hybrid/local] (default: hybrid): ")
 	} else {
-		cfg.Privacy.Mode = "local"
+		cfg.PrivacyMode = "local"
 		fmt.Print("  Choose [cloud/hybrid/local] (default: local): ")
 	}
 
 	mode := readLine(reader)
 	if mode != "" {
-		cfg.Privacy.Mode = mode
+		cfg.PrivacyMode = mode
 	}
-	fmt.Printf("  ✓ Privacy mode: %s\n", cfg.Privacy.Mode)
+	fmt.Printf("  ok — privacy mode: %s\n", cfg.PrivacyMode)
 
 	fmt.Println()
 	fmt.Println("  ─────────────────────────────────────────────────")
 	fmt.Println()
 
+	// Voice selection
+	if cartesiaKey != "" {
+		fmt.Println("  Voice — choose a Cartesia voice ID.")
+		fmt.Println("  Leave blank for the default voice.")
+		fmt.Println()
+		fmt.Print("  Voice ID (or Enter for default): ")
+		voice := readLine(reader)
+		if voice != "" {
+			cfg.Voice = voice
+		}
+		fmt.Println("  ok — voice configured")
+		fmt.Println()
+		fmt.Println("  ─────────────────────────────────────────────────")
+		fmt.Println()
+	}
+
 	// Slap detection
 	if runtime.GOARCH == "arm64" && runtime.GOOS == "darwin" {
 		fmt.Println("  Slap detection uses your MacBook's accelerometer to let you")
-		fmt.Println("  physically interrupt the agent. Requires a background daemon (sudo).")
+		fmt.Println("  physically interrupt the agent. Requires pillowsensord (sudo).")
 		fmt.Println()
 		fmt.Print("  Enable slap detection? [Y/n]: ")
 		slap := readLine(reader)
 		if slap == "" || strings.ToLower(slap) == "y" || strings.ToLower(slap) == "yes" {
-			cfg.Interrupt.SlapEnabled = true
-			fmt.Println("  ✓ Slap detection enabled")
+			fmt.Println("  ok — slap detection enabled")
 		} else {
-			cfg.Interrupt.SlapEnabled = false
-			fmt.Println("  ✓ Slap detection disabled (use Ctrl+\\ for keyboard interrupt)")
+			cfg.SlapThreshold = 0 // disabled
+			fmt.Println("  ok — slap detection disabled")
 		}
 	} else {
-		cfg.Interrupt.SlapEnabled = false
-		fmt.Println("  Slap detection requires Apple Silicon Mac — using keyboard interrupts.")
+		cfg.SlapThreshold = 0
+		fmt.Println("  Slap detection requires Apple Silicon Mac — disabled.")
 	}
 
 	fmt.Println()
@@ -113,8 +125,8 @@ func RunWizard() (*Config, error) {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}
 
-	fmt.Printf("  ✓ Config saved to %s\n", ConfigPath())
-	fmt.Println("    Edit anytime with: pillow config")
+	fmt.Printf("  Config saved to %s\n", ConfigPath())
+	fmt.Println("  Edit anytime with: pillow config")
 	fmt.Println()
 
 	return cfg, nil
