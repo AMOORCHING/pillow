@@ -68,15 +68,15 @@ func New(cfg *config.Config, ttsProvider tts.Provider, summarizer Summarizer) *D
 		cfg:        cfg,
 		tts:        ttsProvider,
 		summarizer: summarizer,
-		queue:      narration.NewQueue(time.Duration(cfg.NarrationStaleMs) * time.Millisecond),
+		queue:      narration.NewQueue(time.Duration(cfg.Narration.StaleThresholdMs) * time.Millisecond),
 		filter:     narration.NewFilter(),
 		tracker:    cost.NewTracker(),
 		history:    history.NewStore(),
 	}
 
 	// Set up drift detector if API key is available
-	if cfg.AnthropicAPIKey != "" {
-		d.drift = drift.NewDetector(cfg.AnthropicAPIKey, cfg.DriftCheckInterval, cfg.DriftPauseMs, cfg.DriftCooldownS)
+	if cfg.Narration.AnthropicAPIKey != "" {
+		d.drift = drift.NewDetector(cfg.Narration.AnthropicAPIKey, cfg.Drift.CheckInterval, cfg.Drift.PauseMs, cfg.Drift.CooldownS)
 		d.drift.SetCallbacks(
 			func(status string, reason string) {
 				d.mu.Lock()
@@ -140,7 +140,7 @@ func (d *Daemon) HandleEvent(ctx context.Context, evt agent.AgentEvent) agent.Ev
 	}
 
 	// Trigger rolling summary compression at interval
-	if d.cfg.SummaryInterval > 0 && count%d.cfg.SummaryInterval == 0 {
+	if d.cfg.Narration.SummaryInterval > 0 && count%d.cfg.Narration.SummaryInterval == 0 {
 		go d.compressSummary(ctx)
 	}
 
@@ -246,7 +246,7 @@ func (d *Daemon) PollSlap() *agent.SlapEvent {
 	}
 
 	// Check staleness
-	if time.Since(d.slapEvent.Timestamp) > time.Duration(d.cfg.SlapStaleMs)*time.Millisecond {
+	if time.Since(d.slapEvent.Timestamp) > time.Duration(d.cfg.Interrupt.StaleMs)*time.Millisecond {
 		d.slapEvent = nil
 		return nil
 	}

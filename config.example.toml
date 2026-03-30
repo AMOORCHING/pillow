@@ -1,33 +1,41 @@
 # ~/.config/pillow/config.toml
 
-privacy_mode = "cloud"             # "cloud" | "hybrid" | "local"
+[privacy]
+  mode = "cloud"                    # "cloud" | "hybrid" | "local"
 
-# API keys
-anthropic_api_key = "sk-ant-..."
-cartesia_api_key = "..."
+[tts]
+  provider = "cartesia"             # "cartesia" | "say" | "piper"
+  speed = 1.0
+  cartesia_api_key = "..."
+  cartesia_voice = "e07c00bc-4134-4eae-9ea4-1a55fb45746b"
+  cartesia_model = "sonic-3"
 
-# Voice
-voice = ""                         # Cartesia voice ID (blank for default)
-cartesia_model = "sonic-3"
+[narration]
+  anthropic_api_key = "sk-ant-..."
+  model = "claude-haiku-4-5-20251001"
+  style = "default"
+  stale_threshold_ms = 3000         # drop narration items older than this
+  batch_pause_ms = 500              # suppress audio if user typed recently
+  summary_interval = 30             # compress every N events
 
-# Drift detection
-drift_check_interval = 10          # check every N tool calls
-drift_pause_ms = 2000              # or on pause > this duration
-drift_cooldown_s = 30              # suppress re-check after drift narration
+[drift]
+  check_interval = 10               # check every N tool calls
+  pause_ms = 2000                   # or on pause > this duration
+  cooldown_s = 30                   # suppress re-check after drift narration
 
-# Summarization
-summary_interval = 30              # compress every N events
+[interrupt]
+  slap_enabled = true
+  slap_threshold = 2.5              # g-force (0 to disable)
+  slap_sound = "chime"              # "chime" | "pain" | "none"
+  sensitivity = 0.15
+  debounce_ms = 1000
+  cooldown_ms = 750
+  stale_ms = 5000
 
-# Slap detection
-slap_threshold = 2.5               # g-force (0 to disable)
-slap_debounce_ms = 1000
-slap_stale_ms = 5000
-slap_sound = "chime"               # "chime" | "none"
+[ipc]
+  socket_path = "/tmp/pillow.sock"
+  sensord_socket_path = "/tmp/pillowsensord.sock"
 
-# IPC
-socket_path = "/tmp/pillow.sock"
-sensord_socket_path = "/tmp/pillowsensord.sock"
-
-# Narration
-narration_stale_ms = 3000          # drop narration items older than this
-mute_while_typing_ms = 500         # suppress audio if user typed within this window
+[cost]
+  show_live = true
+  show_summary = true

@@ -92,7 +92,7 @@ Start the daemon, then use Claude Code (or other tools) with pillow's plugin.`,
 			if err != nil {
 				return err
 			}
-			client := ipc.NewClient(cfg.SocketPath)
+			client := ipc.NewClient(cfg.IPC.SocketPath)
 			if !client.Ping() {
 				return fmt.Errorf("pillow daemon is not running — start with: pillow")
 			}
@@ -118,7 +118,7 @@ Start the daemon, then use Claude Code (or other tools) with pillow's plugin.`,
 			if err != nil {
 				return err
 			}
-			client := ipc.NewClient(cfg.SocketPath)
+			client := ipc.NewClient(cfg.IPC.SocketPath)
 			if !client.Ping() {
 				fmt.Println("pillow daemon is not running")
 				return nil
@@ -171,7 +171,7 @@ Start the daemon, then use Claude Code (or other tools) with pillow's plugin.`,
 		Short: "Check if sensord is running",
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg, _ := config.Load()
-			client := ipc.NewClient(cfg.SensordSocketPath)
+			client := ipc.NewClient(cfg.IPC.SensordSocketPath)
 			if client.Ping() {
 				fmt.Println("pillowsensord is running")
 			} else {
@@ -230,7 +230,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 
 	// Override socket path if flag is set
 	if sp, _ := cmd.Flags().GetString("socket-path"); sp != "" {
-		cfg.SocketPath = sp
+		cfg.IPC.SocketPath = sp
 	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
@@ -251,7 +251,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	d := daemon.New(cfg, components.TTS, components.Summarizer)
 
 	// Create IPC server
-	server := ipc.NewServer(cfg.SocketPath, d)
+	server := ipc.NewServer(cfg.IPC.SocketPath, d)
 
 	// Set up context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -267,24 +267,24 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Start sensord client if slap detection is enabled
-	if cfg.SlapThreshold > 0 {
+	if cfg.Interrupt.SlapEnabled {
 		go startSensordClient(ctx, cfg, d)
 	}
 
-	fmt.Printf("pillow daemon starting (socket: %s, privacy: %s)\n", cfg.SocketPath, cfg.PrivacyMode)
+	fmt.Printf("pillow daemon starting (socket: %s, privacy: %s)\n", cfg.IPC.SocketPath, cfg.Privacy.Mode)
 
 	// Start IPC server (blocks until context cancelled)
 	return server.Start(ctx)
 }
 
 func startSensordClient(ctx context.Context, cfg *config.Config, d *daemon.Daemon) {
-	if !interrupt.SensordRunning(cfg.SensordSocketPath) {
+	if !interrupt.SensordRunning(cfg.IPC.SensordSocketPath) {
 		log.Println("[pillow] pillowsensord not running — slap detection unavailable")
 		return
 	}
 	log.Println("[pillow] connected to pillowsensord for slap detection")
 
-	client := interrupt.NewAccelClient(cfg.SensordSocketPath, func(evt agent.SlapEvent) {
+	client := interrupt.NewAccelClient(cfg.IPC.SensordSocketPath, func(evt agent.SlapEvent) {
 		d.BufferSlap(evt)
 	})
 	if err := client.Run(ctx); err != nil {

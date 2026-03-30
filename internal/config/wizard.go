@@ -25,7 +25,7 @@ func RunWizard() (*Config, error) {
 	fmt.Print("  Anthropic API key (or Enter to skip): ")
 	anthropicKey := readLine(reader)
 	if anthropicKey != "" {
-		cfg.AnthropicAPIKey = anthropicKey
+		cfg.Narration.AnthropicAPIKey = anthropicKey
 		fmt.Println("  ok — Anthropic configured")
 	} else {
 		fmt.Println("  ok — using template-based summarization (offline)")
@@ -42,7 +42,7 @@ func RunWizard() (*Config, error) {
 	fmt.Print("  Cartesia API key (or Enter to skip): ")
 	cartesiaKey := readLine(reader)
 	if cartesiaKey != "" {
-		cfg.CartesiaAPIKey = cartesiaKey
+		cfg.TTS.CartesiaAPIKey = cartesiaKey
 		fmt.Println("  ok — Cartesia configured")
 	} else {
 		fmt.Println("  ok — using macOS say (offline, lower quality)")
@@ -62,21 +62,21 @@ func RunWizard() (*Config, error) {
 
 	// Auto-select based on available keys
 	if cartesiaKey != "" && anthropicKey != "" {
-		cfg.PrivacyMode = "cloud"
+		cfg.Privacy.Mode = "cloud"
 		fmt.Print("  Choose [cloud/hybrid/local] (default: cloud): ")
 	} else if anthropicKey != "" {
-		cfg.PrivacyMode = "hybrid"
+		cfg.Privacy.Mode = "hybrid"
 		fmt.Print("  Choose [cloud/hybrid/local] (default: hybrid): ")
 	} else {
-		cfg.PrivacyMode = "local"
+		cfg.Privacy.Mode = "local"
 		fmt.Print("  Choose [cloud/hybrid/local] (default: local): ")
 	}
 
 	mode := readLine(reader)
 	if mode != "" {
-		cfg.PrivacyMode = mode
+		cfg.Privacy.Mode = mode
 	}
-	fmt.Printf("  ok — privacy mode: %s\n", cfg.PrivacyMode)
+	fmt.Printf("  ok — privacy mode: %s\n", cfg.Privacy.Mode)
 
 	fmt.Println()
 	fmt.Println("  ─────────────────────────────────────────────────")
@@ -90,7 +90,7 @@ func RunWizard() (*Config, error) {
 		fmt.Print("  Voice ID (or Enter for default): ")
 		voice := readLine(reader)
 		if voice != "" {
-			cfg.Voice = voice
+			cfg.TTS.CartesiaVoice = voice
 		}
 		fmt.Println("  ok — voice configured")
 		fmt.Println()
@@ -108,11 +108,11 @@ func RunWizard() (*Config, error) {
 		if slap == "" || strings.ToLower(slap) == "y" || strings.ToLower(slap) == "yes" {
 			fmt.Println("  ok — slap detection enabled")
 		} else {
-			cfg.SlapThreshold = 0 // disabled
+			cfg.Interrupt.SlapEnabled = false
 			fmt.Println("  ok — slap detection disabled")
 		}
 	} else {
-		cfg.SlapThreshold = 0
+		cfg.Interrupt.SlapEnabled = false
 		fmt.Println("  Slap detection requires Apple Silicon Mac — disabled.")
 	}
 
