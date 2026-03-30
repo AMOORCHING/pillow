@@ -171,26 +171,44 @@ func (d *Daemon) HandleSessionStart(_ context.Context, req agent.SessionStartReq
 }
 
 // HandleSessionEnd finalizes the session and returns cost + summary.
-func (d *Daemon) HandleSessionEnd(ctx context.Context, req agent.SessionEndRequest) agent.SessionEndResponse {
-	d.compressSummary(ctx)
-
+func (d *Daemon) HandleSessionEnd(_ context.Context, req agent.SessionEndRequest) agent.SessionEndResponse {
 	d.mu.RLock()
 	summary := d.currentSummary
 	d.mu.RUnlock()
 
 	costSummary := d.tracker.Summary()
-	endText := fmt.Sprintf("Wrapping up. Session complete. %s", costSummary)
+	speechData := d.tracker.SpeechData()
 
+	// Speak immediately, then follow up with humanized cost — all in background
+	// so the HTTP response returns instantly.
 	if d.tts != nil {
-		d.tracker.AddTTSChars(len(endText))
-		go d.tts.Speak(context.Background(), endText)
+		go d.speakSessionEnd(speechData)
 	}
+
+	go d.compressSummary(context.Background())
 
 	log.Printf("[pillow] session ended: %s", req.SessionID)
 
 	return agent.SessionEndResponse{
 		Cost:    costSummary,
 		Summary: summary,
+	}
+}
+
+func (d *Daemon) speakSessionEnd(data cost.SpeechData) {
+	bgCtx := context.Background()
+
+	if err := d.tts.Speak(bgCtx, "Wrapping up."); err != nil {
+		log.Printf("[pillow] TTS error: %v", err)
+	}
+
+	humanized := narration.HumanizeCostForSpeech(bgCtx,
+		d.cfg.Narration.AnthropicAPIKey, d.cfg.Narration.Model, data)
+
+	d.tracker.AddTTSChars(len("Wrapping up.") + len(humanized))
+
+	if err := d.tts.Speak(bgCtx, humanized); err != nil {
+		log.Printf("[pillow] TTS error: %v", err)
 	}
 }
 

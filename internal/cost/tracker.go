@@ -116,6 +116,33 @@ func (t *Tracker) Summary() string {
 	)
 }
 
+// SpeechData returns structured data suitable for generating a spoken summary.
+func (t *Tracker) SpeechData() SpeechData {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	total := float64(t.ttsChars)*t.ttsRate +
+		float64(t.llmInputToks+t.driftInputToks)*t.llmInputRate +
+		float64(t.llmOutputToks+t.driftOutputToks)*t.llmOutputRate
+
+	return SpeechData{
+		TotalCost:      total,
+		Duration:       time.Since(t.sessionStart),
+		NarrationCount: t.narrationCount,
+		SlapCount:      t.slapCount,
+		EventCount:     t.llmInputToks + t.llmOutputToks,
+	}
+}
+
+// SpeechData holds session stats for generating a spoken recap.
+type SpeechData struct {
+	TotalCost      float64
+	Duration       time.Duration
+	NarrationCount int
+	SlapCount      int
+	EventCount     int
+}
+
 func formatDuration(d time.Duration) string {
 	d = d.Round(time.Second)
 	m := int(d.Minutes())
