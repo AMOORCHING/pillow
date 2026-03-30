@@ -49,7 +49,11 @@ func (c *CartesiaProvider) connect() error {
 	}
 
 	url := fmt.Sprintf("wss://api.cartesia.ai/tts/websocket?api_key=%s&cartesia_version=2025-04-16", c.apiKey)
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	dialer := websocket.Dialer{
+		ReadBufferSize:  256 * 1024,
+		WriteBufferSize: 8 * 1024,
+	}
+	conn, _, err := dialer.Dial(url, nil)
 	if err != nil {
 		return fmt.Errorf("connecting to Cartesia: %w", err)
 	}

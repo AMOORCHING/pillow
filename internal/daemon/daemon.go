@@ -250,6 +250,7 @@ func (d *Daemon) GetStatus() agent.StatusResponse {
 }
 
 // PollSlap returns a buffered slap event if fresh, otherwise nil.
+// Uses a generous 60s window so slaps survive long-running tool executions.
 func (d *Daemon) PollSlap() *agent.SlapEvent {
 	d.slapMu.Lock()
 	defer d.slapMu.Unlock()
@@ -258,8 +259,8 @@ func (d *Daemon) PollSlap() *agent.SlapEvent {
 		return nil
 	}
 
-	// Check staleness
-	if time.Since(d.slapEvent.Timestamp) > time.Duration(d.cfg.Interrupt.StaleMs)*time.Millisecond {
+	const maxSlapAge = 60 * time.Second
+	if time.Since(d.slapEvent.Timestamp) > maxSlapAge {
 		d.slapEvent = nil
 		return nil
 	}
@@ -270,11 +271,21 @@ func (d *Daemon) PollSlap() *agent.SlapEvent {
 	return evt
 }
 
-// BufferSlap stores a slap event (called by the sensord client goroutine).
+// BufferSlap stores a slap event and gives immediate audio feedback.
 func (d *Daemon) BufferSlap(evt agent.SlapEvent) {
 	d.slapMu.Lock()
-	defer d.slapMu.Unlock()
 	d.slapEvent = &evt
+	d.slapMu.Unlock()
+
+	log.Printf("[pillow] slap buffered — awaiting next tool poll")
+	if d.tts != nil {
+		go func() {
+			d.tts.Stop()
+			if err := d.tts.Speak(context.Background(), "Paused."); err != nil {
+				log.Printf("[pillow] TTS error on slap ack: %v", err)
+			}
+		}()
+	}
 }
 
 // LogInterrupt records an interrupt event to history.
