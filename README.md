@@ -1,222 +1,183 @@
 # pillow
 
-Voice-narrated agentic coding supervision with physical interrupts.
+Voice guardrails for coding agents.
 
-A background daemon that supervises agentic coding tools (starting with Claude Code), providing voice narration of critical events, irreversibility warnings, drift detection, and slap-to-interrupt negotiation.
+`pillow` runs in the background while you use Claude Code. It stays quiet most of the time, and only speaks when something needs your attention:
 
-## Install
+- dangerous or irreversible operations
+- possible goal drift
+- session recap + cost summary
 
-### Homebrew (recommended)
+It can also support physical slap-to-interrupt on Apple Silicon Macs.
+
+## 5-minute setup
+
+### 1) Install
+
+#### Homebrew (recommended)
 
 ```bash
 brew install AMOORCHING/pillow/pillow-cli
 ```
 
-This installs both `pillow` and `pillowsensord`.
-
-### Go
+#### Go
 
 ```bash
 go install github.com/AMOORCHING/pillow/cmd/pillow@latest
-go install github.com/AMOORCHING/pillow/cmd/pillowsensord@latest  # optional, for slap detection
+go install github.com/AMOORCHING/pillow/cmd/pillowsensord@latest # optional, slap detection
 ```
 
-### Build from source
+#### Build from source
 
 ```bash
 git clone https://github.com/AMOORCHING/pillow
 cd pillow
-make build    # also: make install, make test, make vet, make clean
+make build
 ```
 
-## Quick Start
+### 2) Run first-time setup
 
 ```bash
-# 1. Run the setup wizard
 pillow setup
+```
 
-# 2. Install the Claude Code plugin
+This creates `~/.config/pillow/config.toml` and walks you through:
+
+- Anthropic key (for cloud summaries + drift checks)
+- Cartesia key (for cloud voice)
+- privacy mode (`cloud`, `hybrid`, or `local`)
+- optional slap detection
+
+### 3) Install Claude Code hooks
+
+```bash
 bash plugin/install.sh
+```
 
-# 3. Start the daemon
+What this does:
+
+- installs hook scripts to `~/.config/pillow/hooks/`
+- installs `pillow-hook` into your PATH
+- merges hook config into `~/.claude/settings.json` (when `jq` is installed)
+
+If `jq` is missing, install it and run the installer again.
+
+### 4) Start pillow daemon
+
+```bash
 pillow
-
-# 4. Use Claude Code normally — pillow watches and narrates in the background
-claude "refactor the auth middleware to use JWT"
 ```
 
-## Architecture
+Keep this running in a terminal.
 
-pillow runs as a headless background daemon. Claude Code communicates with it via shell-script hooks over a Unix socket HTTP API. There is no TUI — silence is the default, and pillow only speaks up when something important happens.
-
-```
-Claude Code ──hooks──> pillow daemon ──> TTS
-                           │
-                  ┌────────┼────────┐
-                  │        │        │
-              classify   drift   summarize
-              (heuristic) (Haiku)  (Haiku)
-```
-
-### What triggers narration
-
-- **Irreversibility warnings** — dangerous operations like `rm -rf`, migrations, `.env` edits, destructive SQL
-- **Drift detection** — agent veering off-track from its stated goal
-- **Session end** — cost summary and recap
-
-Everything else is silent.
-
-## Usage
-
-### Daemon
+### 5) Use Claude Code as usual
 
 ```bash
-pillow                          # start the daemon (foreground)
-pillow --socket-path /tmp/p.sock  # custom socket path
-pillow --verbose                # verbose logging
+claude "refactor auth middleware to use JWT"
 ```
 
-### Commands
+If hooks are installed correctly, pillow will now monitor tool calls and narrate important events.
+
+## Verify everything works
+
+Run these checks after setup:
 
 ```bash
-pillow setup                    # interactive setup wizard
-pillow config                   # print current config
-pillow config edit              # open config in $EDITOR
-pillow status                   # daemon status and session info
-pillow recap                    # request retrospective summary
-pillow history                  # print recent interrupt events
-pillow sensord start            # start sensor daemon (requires sudo)
-pillow sensord stop             # stop sensor daemon
-pillow sensord status           # check if sensor daemon is running
+pillow status
+pillow config
 ```
 
-## Plugin (Claude Code Integration)
+Expected behavior:
 
-pillow integrates with Claude Code via [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks). The plugin consists of shell scripts that send events to the pillow daemon over its Unix socket.
+- `pillow status` says the daemon is running (when started)
+- `pillow config` prints your saved config
 
-### Hooks
+## Most common commands
 
-| Hook | What it does |
-|------|-------------|
-| `PreToolUse` | Sends tool call to daemon for classification, polls for slap interrupts, can block dangerous operations |
-| `PostToolUse` | Logs completed tool calls (fire-and-forget) |
-| `SessionStart` | Signals session start with goal text |
-| `SessionEnd` | Triggers final summary and cost report |
+```bash
+pillow                 # start daemon (foreground)
+pillow --verbose       # verbose logs
+pillow setup           # setup wizard
+pillow config          # show current config
+pillow config edit     # edit config in $EDITOR
+pillow status          # daemon/session status
+pillow recap           # get current session recap
+pillow history         # recent interrupt history
+```
 
-### Install the plugin
+### Slap detection commands (optional)
+
+Requires Apple Silicon and `sudo`:
+
+```bash
+pillow sensord start
+pillow sensord status
+pillow sensord stop
+```
+
+## Privacy modes
+
+| Mode | Summarizer | TTS | Drift detection | Data leaving machine |
+|------|-----------|-----|-----------------|----------------------|
+| `cloud` | Anthropic Haiku | Cartesia | Yes | summaries, narration text, drift checks |
+| `hybrid` | Anthropic Haiku | Local (`say`/`piper`) | Yes | summaries, drift checks |
+| `local` | Template-based | Local (`say`/`piper`) | No | nothing |
+
+Environment variables `ANTHROPIC_API_KEY` and `CARTESIA_API_KEY` override config file values.
+
+## What pillow actually does
+
+`pillow` is a daemon with a local Unix socket API. Claude Code hooks send tool events to it.
+
+It classifies calls into:
+
+- `block` (can interrupt and require negotiation)
+- `warn` (narrated caution)
+- `none` (silent)
+
+By default it does not narrate every event; it only narrates high-signal moments.
+
+## Troubleshooting
+
+### `pillow status` says daemon is not running
+
+Start it in another terminal:
+
+```bash
+pillow
+```
+
+### No narration while using Claude Code
+
+Check:
+
+1. `pillow` daemon is running
+2. `bash plugin/install.sh` completed successfully
+3. `~/.claude/settings.json` contains pillow hooks
+4. `pillow-hook` is available in your `PATH`
+
+### Installer says `jq` not found
+
+Install `jq`, then run:
 
 ```bash
 bash plugin/install.sh
 ```
 
-This copies hook scripts to `~/.config/pillow/hooks/` and merges hook configuration into Claude Code's `~/.claude/settings.json`.
+### Slap detection does not work
 
-## Irreversibility Classification
+- only supported on Apple Silicon Mac
+- `pillowsensord` must be running as root (`pillow sensord start`)
+- slap threshold may be too high in config
 
-pillow classifies every tool call by danger level:
-
-| Level | Action | Examples |
-|-------|--------|---------|
-| `block` | Narrates warning, can halt agent | `rm -rf`, `DROP TABLE`, migration files |
-| `warn` | Narrates note | `.env` edits, `chmod`, `Dockerfile` changes |
-| `none` | Silent | Regular reads, writes, searches |
-
-## Drift Detection
-
-When an Anthropic API key is configured, pillow periodically checks whether the agent is staying on track using a lightweight Haiku LLM call. Checks trigger:
-
-- Every N tool calls (default: 10)
-- After a pause longer than a threshold (default: 2s)
-- With a cooldown to avoid over-checking (default: 30s)
-
-If drift is detected, pillow narrates the reason aloud.
-
-## Slap Detection
-
-Slap your MacBook to interrupt the agent. Requires Apple Silicon and the sensor daemon.
+## Development
 
 ```bash
-pillow sensord start             # start accelerometer daemon (prompts for sudo)
-pillow                           # daemon connects to sensord automatically
+make build
+make test
+make vet
+make clean
 ```
-
-When a slap is detected, the PreToolUse hook polls it from the daemon and can block the next tool call, triggering a negotiation flow.
-
-The sensor daemon (`pillowsensord`) runs as root to access the accelerometer. It communicates with the main pillow daemon over a separate Unix socket at `/tmp/pillowsensord.sock`.
-
-## Privacy Modes
-
-| Mode | Summarizer | TTS | Drift | What leaves your machine |
-|------|-----------|-----|-------|--------------------------|
-| `cloud` | Anthropic Haiku | Cartesia | Yes | Agent summaries, narration text, drift checks |
-| `hybrid` | Anthropic Haiku | Local (piper/say) | Yes | Agent summaries, drift checks |
-| `local` | Templates | Local (piper/say) | No | Nothing |
-
-TTS never sees your source code — only summarized narration text.
-
-## Configuration
-
-Config lives at `~/.config/pillow/config.toml`. Run `pillow setup` to generate it interactively, or `pillow config edit` to edit manually.
-
-```toml
-privacy_mode = "cloud"             # "cloud" | "hybrid" | "local"
-
-# API keys
-anthropic_api_key = "sk-ant-..."
-cartesia_api_key = "..."
-
-# Voice
-voice = ""                         # Cartesia voice ID (blank for default)
-cartesia_model = "sonic-3"
-
-# Drift detection
-drift_check_interval = 10          # check every N tool calls
-drift_pause_ms = 2000              # or on pause > this duration
-drift_cooldown_s = 30              # suppress re-check after drift narration
-
-# Summarization
-summary_interval = 30              # compress every N events
-
-# Slap detection
-slap_threshold = 2.5               # g-force (0 to disable)
-slap_debounce_ms = 1000
-slap_stale_ms = 5000
-slap_sound = "chime"               # "chime" | "none"
-
-# IPC
-socket_path = "/tmp/pillow.sock"
-sensord_socket_path = "/tmp/pillowsensord.sock"
-
-# Narration
-narration_stale_ms = 3000          # drop narration items older than this
-mute_while_typing_ms = 500         # suppress audio if user typed within this window
-```
-
-Environment variables `CARTESIA_API_KEY` and `ANTHROPIC_API_KEY` override config file values.
-
-## Cost Tracking
-
-pillow tracks its own API costs (TTS, summarizer, and drift checks) and reports them at session end:
-
-```
-Session complete. TTS: ~$0.008 (1247 chars), LLM: ~$0.003 (2891 in/412 out), Drift: ~$0.001 (500 in/50 out), Slaps: 3
-```
-
-Use `pillow status` to check costs mid-session, or `pillow recap` for the current rolling summary.
-
-## IPC API
-
-The daemon exposes an HTTP API over its Unix socket:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/event` | POST | Submit a tool use event for classification |
-| `/slap` | GET | Poll for buffered slap events |
-| `/narrate` | POST | Immediately narrate text |
-| `/summary` | GET | Get current rolling summary |
-| `/session/start` | POST | Start a new session |
-| `/session/end` | POST | End session, get cost + summary |
-| `/status` | GET | Daemon status and session info |
 
 ## License
 
