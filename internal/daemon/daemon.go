@@ -109,9 +109,8 @@ func (d *Daemon) HandleEvent(ctx context.Context, evt agent.AgentEvent) agent.Ev
 	// Classify irreversibility
 	level, reason := classify.Classify(evt.Tool, evt.Input)
 
-	// Feed drift detector
 	if d.drift != nil {
-		d.drift.OnEvent(ctx, evt)
+		d.drift.OnEvent(context.Background(), evt)
 	}
 
 	// Check silence-first filter
@@ -135,20 +134,20 @@ func (d *Daemon) HandleEvent(ctx context.Context, evt agent.AgentEvent) agent.Ev
 		if narrationText != "" {
 			resp.Narration = narrationText
 			d.queue.Push(narrationText, narration.PriorityHigh)
-			go d.speakNext(ctx)
+			go d.speakNext(context.Background())
 		}
 	}
 
 	// Trigger rolling summary compression at interval
 	if d.cfg.Narration.SummaryInterval > 0 && count%d.cfg.Narration.SummaryInterval == 0 {
-		go d.compressSummary(ctx)
+		go d.compressSummary(context.Background())
 	}
 
 	return resp
 }
 
 // HandleSessionStart initializes a new session.
-func (d *Daemon) HandleSessionStart(ctx context.Context, req agent.SessionStartRequest) {
+func (d *Daemon) HandleSessionStart(_ context.Context, req agent.SessionStartRequest) {
 	d.mu.Lock()
 	d.sessionID = req.SessionID
 	d.sessionGoal = req.Goal
@@ -166,18 +165,13 @@ func (d *Daemon) HandleSessionStart(ctx context.Context, req agent.SessionStartR
 	log.Printf("[pillow] session started: %s (goal: %s)", req.SessionID, req.Goal)
 
 	if d.tts != nil {
-		d.tts.Speak(ctx, "Pillow is listening.")
 		d.tracker.AddTTSChars(len("Pillow is listening."))
+		go d.tts.Speak(context.Background(), "Pillow is listening.")
 	}
 }
 
 // HandleSessionEnd finalizes the session and returns cost + summary.
 func (d *Daemon) HandleSessionEnd(ctx context.Context, req agent.SessionEndRequest) agent.SessionEndResponse {
-	if d.tts != nil {
-		d.tts.Speak(ctx, "Wrapping up.")
-		d.tracker.AddTTSChars(len("Wrapping up."))
-	}
-
 	d.compressSummary(ctx)
 
 	d.mu.RLock()
@@ -185,10 +179,11 @@ func (d *Daemon) HandleSessionEnd(ctx context.Context, req agent.SessionEndReque
 	d.mu.RUnlock()
 
 	costSummary := d.tracker.Summary()
+	endText := fmt.Sprintf("Wrapping up. Session complete. %s", costSummary)
 
-	endText := fmt.Sprintf("Session complete. %s", costSummary)
 	if d.tts != nil {
-		d.tts.Speak(ctx, endText)
+		d.tracker.AddTTSChars(len(endText))
+		go d.tts.Speak(context.Background(), endText)
 	}
 
 	log.Printf("[pillow] session ended: %s", req.SessionID)
