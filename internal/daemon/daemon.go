@@ -148,9 +148,8 @@ func (d *Daemon) HandleEvent(ctx context.Context, evt agent.AgentEvent) agent.Ev
 }
 
 // HandleSessionStart initializes a new session.
-func (d *Daemon) HandleSessionStart(_ context.Context, req agent.SessionStartRequest) {
+func (d *Daemon) HandleSessionStart(ctx context.Context, req agent.SessionStartRequest) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	d.sessionID = req.SessionID
 	d.sessionGoal = req.Goal
 	d.eventCount = 0
@@ -162,13 +161,23 @@ func (d *Daemon) HandleSessionStart(_ context.Context, req agent.SessionStartReq
 	if d.drift != nil {
 		d.drift.SetSessionGoal(req.Goal)
 	}
+	d.mu.Unlock()
 
 	log.Printf("[pillow] session started: %s (goal: %s)", req.SessionID, req.Goal)
+
+	if d.tts != nil {
+		d.tts.Speak(ctx, "Pillow is listening.")
+		d.tracker.AddTTSChars(len("Pillow is listening."))
+	}
 }
 
 // HandleSessionEnd finalizes the session and returns cost + summary.
 func (d *Daemon) HandleSessionEnd(ctx context.Context, req agent.SessionEndRequest) agent.SessionEndResponse {
-	// Final compression
+	if d.tts != nil {
+		d.tts.Speak(ctx, "Wrapping up.")
+		d.tracker.AddTTSChars(len("Wrapping up."))
+	}
+
 	d.compressSummary(ctx)
 
 	d.mu.RLock()
@@ -177,7 +186,6 @@ func (d *Daemon) HandleSessionEnd(ctx context.Context, req agent.SessionEndReque
 
 	costSummary := d.tracker.Summary()
 
-	// Narrate session end
 	endText := fmt.Sprintf("Session complete. %s", costSummary)
 	if d.tts != nil {
 		d.tts.Speak(ctx, endText)
