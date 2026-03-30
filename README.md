@@ -35,10 +35,18 @@ cd pillow
 make build
 ```
 
+This produces `./bin/pillow` and `./bin/pillowsensord`. You can either run them
+directly from `./bin/` or copy them somewhere in your `PATH`:
+
+```bash
+sudo cp bin/pillow bin/pillowsensord /usr/local/bin/
+```
+
 ### 2) Run first-time setup
 
 ```bash
-pillow setup
+pillow setup          # if installed to PATH
+./bin/pillow setup    # if running from source
 ```
 
 This creates `~/.config/pillow/config.toml` and walks you through:
@@ -64,11 +72,22 @@ If `jq` is missing, install it and run the installer again.
 
 ### 4) Start pillow daemon
 
+In one terminal, start the main daemon:
+
 ```bash
-pillow
+pillow                # if installed to PATH
+./bin/pillow          # if running from source
 ```
 
-Keep this running in a terminal.
+Keep this running.
+
+If you want slap-to-interrupt (Apple Silicon only), start the sensor daemon in a
+**second terminal** with `sudo` (it needs root for accelerometer access):
+
+```bash
+sudo pillowsensord          # if installed to PATH
+sudo ./bin/pillowsensord    # if running from source
+```
 
 ### 5) Use Claude Code as usual
 
@@ -77,6 +96,9 @@ claude "refactor auth middleware to use JWT"
 ```
 
 If hooks are installed correctly, pillow will now monitor tool calls and narrate important events.
+
+> **Note:** The hooks silently no-op when the daemon isn't running — you won't
+> see errors in Claude Code if you forget to start pillow.
 
 ## Verify everything works
 
@@ -105,12 +127,20 @@ pillow recap           # get current session recap
 pillow history         # recent interrupt history
 ```
 
-### Slap detection commands (optional)
+### Slap detection (optional)
 
-Requires Apple Silicon and `sudo`:
+Requires Apple Silicon. The sensor daemon needs `sudo` for accelerometer access
+and must run in its own terminal alongside the main daemon:
 
 ```bash
-pillow sensord start
+sudo pillowsensord          # if installed to PATH
+sudo ./bin/pillowsensord    # if running from source
+```
+
+You can also manage it through the main CLI:
+
+```bash
+pillow sensord start    # starts pillowsensord in background (needs sudo)
 pillow sensord status
 pillow sensord stop
 ```
@@ -167,8 +197,9 @@ bash plugin/install.sh
 ### Slap detection does not work
 
 - only supported on Apple Silicon Mac
-- `pillowsensord` must be running as root (`pillow sensord start`)
-- slap threshold may be too high in config
+- `pillowsensord` must be running as root — either `sudo pillowsensord` in a
+  separate terminal, or `pillow sensord start` (which invokes `sudo` for you)
+- slap threshold may be too high in config — check with `pillow config edit`
 
 ## Development
 
